@@ -21,6 +21,9 @@ if ($Platform -like "windows2016") {
 } elseif ($Platform -like "windows2019")  {
   $BaseImageName="mcr.microsoft.com/windows/servercore@sha256:cc6d6da31014dceab4daee8b5a8da4707233f4ef42eaf071e45cee044ac738f4"
   $BaseImageNameWithDigest="mcr.microsoft.com/windows/servercore@sha256:cc6d6da31014dceab4daee8b5a8da4707233f4ef42eaf071e45cee044ac738f4"
+} elseif ($Platform -like "windows2022") {
+  $BaseImageName="mcr.microsoft.com/windows/servercore@sha256:8f756a7fd4fe963cc7dd2c3ad1597327535da8e8f55a7d1932780934efa87e04"
+  $BaseImageNameWithDigest="mcr.microsoft.com/windows/servercore@sha256:8f756a7fd4fe963cc7dd2c3ad1597327535da8e8f55a7d1932780934efa87e04"
 } else {
   echo "Invalid platform parameter"
   exit 1
