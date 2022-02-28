@@ -1,3 +1,4 @@
+//go:build codegen
 // +build codegen
 
 package api
@@ -5,6 +6,7 @@ package api
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +51,8 @@ func (a *API) customizationPasses() error {
 		"s3control":  s3ControlCustomizations,
 		"cloudfront": cloudfrontCustomizations,
 		"rds":        rdsCustomizations,
+		"neptune":    neptuneCustomizations,
+		"docdb":      docdbCustomizations,
 
 		// Disable endpoint resolving for services that require customer
 		// to provide endpoint them selves.
@@ -84,6 +88,62 @@ func (a *API) customizationPasses() error {
 		}
 	}
 
+	if err := addHTTPChecksumCustomDocumentation(a); err != nil {
+		if err != nil {
+			return fmt.Errorf("service httpChecksum trait customization failed, %s: %v",
+				a.PackageName(), err)
+		}
+	}
+
+	return nil
+}
+
+func addHTTPChecksumCustomDocumentation(a *API) error {
+	for opName, o := range a.Operations {
+		if o.HTTPChecksum.RequestAlgorithmMember != "" {
+			ref := o.InputRef.Shape.GetModeledMember(o.HTTPChecksum.RequestAlgorithmMember)
+			if ref == nil {
+				return fmt.Errorf(
+					"expect httpChecksum.RequestAlgorithmMember %v to be modeled input member for %v",
+					o.HTTPChecksum.RequestAlgorithmMember,
+					opName,
+				)
+			}
+
+			ref.Documentation = AppendDocstring(ref.Documentation, `
+				The AWS SDK for Go v1 does not support automatic computing
+				request payload checksum. This feature is available in the AWS
+				SDK for Go v2. If a value is specified for this parameter, the
+				matching algorithm's checksum member must be populated with the
+				algorithm's checksum of the request payload. 
+			`)
+			if o.RequestChecksumRequired() {
+				ref.Documentation = AppendDocstring(ref.Documentation, `
+					The SDK will automatically compute the Content-MD5 checksum
+					for this operation. The AWS SDK for Go v2 allows you to
+					configure alternative checksum algorithm to be used.
+				`)
+			}
+		}
+
+		if o.HTTPChecksum.RequestValidationModeMember != "" {
+			ref := o.InputRef.Shape.GetModeledMember(o.HTTPChecksum.RequestValidationModeMember)
+			if ref == nil {
+				return fmt.Errorf(
+					"expect httpChecksum.RequestValidationModeMember %v to be modeled input member for %v",
+					o.HTTPChecksum.RequestValidationModeMember,
+					opName,
+				)
+			}
+
+			ref.Documentation = AppendDocstring(ref.Documentation, `
+				The AWS SDK for Go v1 does not support automatic response
+				payload checksum validation. This feature is available in the
+				AWS SDK for Go v2.
+			`)
+		}
+	}
+
 	return nil
 }
 
@@ -94,6 +154,10 @@ func supressSmokeTest(a *API) error {
 
 // Customizes the API generation to replace values specific to S3.
 func s3Customizations(a *API) error {
+
+	// back-fill signing name as 's3'
+	a.Metadata.SigningName = "s3"
+
 	var strExpires *Shape
 
 	var keepContentMD5Ref = map[string]struct{}{
@@ -188,10 +252,10 @@ func s3CustRemoveHeadObjectModeledErrors(a *API) {
 	if !ok {
 		return
 	}
-	op.Documentation += `
-//
-// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses
-// for more information on returned errors.`
+	op.Documentation = AppendDocstring(op.Documentation, `
+		See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses
+		for more information on returned errors.
+	`)
 	op.ErrorRefs = []ShapeRef{}
 }
 
@@ -313,31 +377,65 @@ func mergeServicesCustomizations(a *API) error {
 	return nil
 }
 
-// rdsCustomizations are customization for the service/rds. This adds non-modeled fields used for presigning.
+// rdsCustomizations are customization for the service/rds. This adds
+// non-modeled fields used for presigning.
 func rdsCustomizations(a *API) error {
 	inputs := []string{
 		"CopyDBSnapshotInput",
 		"CreateDBInstanceReadReplicaInput",
 		"CopyDBClusterSnapshotInput",
 		"CreateDBClusterInput",
+		"StartDBInstanceAutomatedBackupsReplicationInput",
 	}
-	for _, input := range inputs {
+	generatePresignedURL(a, inputs)
+	return nil
+}
+
+// neptuneCustomizations are customization for the service/neptune. This adds
+// non-modeled fields used for presigning.
+func neptuneCustomizations(a *API) error {
+	inputs := []string{
+		"CopyDBClusterSnapshotInput",
+		"CreateDBClusterInput",
+	}
+	generatePresignedURL(a, inputs)
+	return nil
+}
+
+// neptuneCustomizations are customization for the service/neptune. This adds
+// non-modeled fields used for presigning.
+func docdbCustomizations(a *API) error {
+	inputs := []string{
+		"CopyDBClusterSnapshotInput",
+		"CreateDBClusterInput",
+	}
+	generatePresignedURL(a, inputs)
+	return nil
+}
+
+func generatePresignedURL(a *API, inputShapes []string) {
+	for _, input := range inputShapes {
 		if ref, ok := a.Shapes[input]; ok {
 			ref.MemberRefs["SourceRegion"] = &ShapeRef{
-				Documentation: docstring(`SourceRegion is the source region where the resource exists. This is not sent over the wire and is only used for presigning. This value should always have the same region as the source ARN.`),
-				ShapeName:     "String",
-				Shape:         a.Shapes["String"],
-				Ignore:        true,
+				Documentation: docstring(`
+				SourceRegion is the source region where the resource exists.
+				This is not sent over the wire and is only used for presigning.
+				This value should always have the same region as the source
+				ARN.
+				`),
+				ShapeName: "String",
+				Shape:     a.Shapes["String"],
+				Ignore:    true,
 			}
 			ref.MemberRefs["DestinationRegion"] = &ShapeRef{
-				Documentation: docstring(`DestinationRegion is used for presigning the request to a given region.`),
-				ShapeName:     "String",
-				Shape:         a.Shapes["String"],
+				Documentation: docstring(`
+				DestinationRegion is used for presigning the request to a given region.
+				`),
+				ShapeName: "String",
+				Shape:     a.Shapes["String"],
 			}
 		}
 	}
-
-	return nil
 }
 
 func disableEndpointResolving(a *API) error {
@@ -353,7 +451,7 @@ func backfillAuthType(typ AuthType, opNames ...string) func(*API) error {
 				panic("unable to backfill auth-type for unknown operation " + opName)
 			}
 			if v := op.AuthType; len(v) != 0 {
-				fmt.Fprintf(os.Stderr, "unable to backfill auth-type for %s, already set, %s", opName, v)
+				fmt.Fprintf(os.Stderr, "unable to backfill auth-type for %s, already set, %s\n", opName, v)
 				continue
 			}
 
@@ -362,4 +460,74 @@ func backfillAuthType(typ AuthType, opNames ...string) func(*API) error {
 
 		return nil
 	}
+}
+
+// Must be invoked with the original shape name
+func removeUnsupportedJSONValue(a *API) error {
+	for shapeName, shape := range a.Shapes {
+		switch shape.Type {
+		case "structure":
+			for refName, ref := range shape.MemberRefs {
+				if !ref.JSONValue {
+					continue
+				}
+				if err := removeUnsupportedShapeRefJSONValue(a, shapeName, refName, ref); err != nil {
+					return fmt.Errorf("failed remove unsupported JSONValue from %v.%v, %v",
+						shapeName, refName, err)
+				}
+			}
+		case "list":
+			if !shape.MemberRef.JSONValue {
+				continue
+			}
+			if err := removeUnsupportedShapeRefJSONValue(a, shapeName, "", &shape.MemberRef); err != nil {
+				return fmt.Errorf("failed remove unsupported JSONValue from %v, %v",
+					shapeName, err)
+			}
+		case "map":
+			if !shape.ValueRef.JSONValue {
+				continue
+			}
+			if err := removeUnsupportedShapeRefJSONValue(a, shapeName, "", &shape.ValueRef); err != nil {
+				return fmt.Errorf("failed remove unsupported JSONValue from %v, %v",
+					shapeName, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func removeUnsupportedShapeRefJSONValue(a *API, parentName, refName string, ref *ShapeRef) (err error) {
+	var found bool
+
+	defer func() {
+		if !found && err == nil {
+			log.Println("removing JSONValue", a.PackageName(), parentName, refName)
+			ref.JSONValue = false
+			ref.SuppressedJSONValue = true
+		}
+	}()
+
+	legacyShapes, ok := legacyJSONValueShapes[a.PackageName()]
+	if !ok {
+		return nil
+	}
+
+	legacyShape, ok := legacyShapes[parentName]
+	if !ok {
+		return nil
+	}
+
+	switch legacyShape.Type {
+	case "structure":
+		_, ok = legacyShape.StructMembers[refName]
+		found = ok
+	case "list":
+		found = legacyShape.ListMemberRef
+	case "map":
+		found = legacyShape.MapValueRef
+	}
+
+	return nil
 }
