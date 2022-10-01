@@ -1,4 +1,5 @@
 //go:build windows
+// +build windows
 
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
 //
@@ -17,55 +18,19 @@ package stats
 
 import (
 	"context"
-	"os/exec"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/api/task"
 	"github.com/aws/amazon-ecs-agent/agent/stats/resolver"
+	"github.com/aws/amazon-ecs-agent/agent/stats/statsretriever"
 
 	dockerstats "github.com/docker/docker/api/types"
 	"github.com/pkg/errors"
 )
 
-const (
-	receivedBroadcastPackets = "ReceivedBroadcastPackets"
-	receivedMulticastPackets = "ReceivedMulticastPackets"
-	receivedUnicastPackets   = "ReceivedUnicastPackets"
-	sentBroadcastPackets     = "SentBroadcastPackets"
-	sentMulticastPackets     = "SentMulticastPackets"
-	sentUnicastPackets       = "SentUnicastPackets"
-	receivedBytes            = "ReceivedBytes"
-	receivedPacketErrors     = "ReceivedPacketErrors"
-	receivedDiscardedPackets = "ReceivedDiscardedPackets"
-	sentBytes                = "SentBytes"
-	outboundPacketErrors     = "OutboundPacketErrors"
-	outboundDiscardedPackets = "OutboundDiscardedPackets"
-)
-
-var (
-	// Making it visible for unit testing
-	execCommand = exec.Command
-	// Fields to be extracted from the stats returned by cmdlet.
-	networkStatKeys = []string{
-		receivedBroadcastPackets,
-		receivedMulticastPackets,
-		receivedUnicastPackets,
-		sentBroadcastPackets,
-		sentMulticastPackets,
-		sentUnicastPackets,
-		receivedBytes,
-		receivedPacketErrors,
-		receivedDiscardedPackets,
-		sentBytes,
-		outboundDiscardedPackets,
-		outboundPacketErrors,
-	}
-)
-
 type StatsTask struct {
 	*statsTaskCommon
+	statsRetriever statsretriever.StatsRetriever
 }
 
 func newStatsTaskContainer(taskARN, taskId, containerPID string, numberOfContainers int,
@@ -90,6 +55,7 @@ func newStatsTaskContainer(taskARN, taskId, containerPID string, numberOfContain
 			Resolver:              resolver,
 			metricPublishInterval: publishInterval,
 		},
+		statsRetriever: statsretriever.NewStatsRetriever(),
 	}, nil
 }
 
@@ -100,7 +66,8 @@ func (taskStat *StatsTask) retrieveNetworkStatistics() (map[string]dockerstats.N
 
 	networkStats := make(map[string]dockerstats.NetworkStats, len(taskStat.TaskMetadata.DeviceName))
 	for _, device := range taskStat.TaskMetadata.DeviceName {
-		networkAdaptorStatistics, err := taskStat.getNetworkAdaptorStatistics(device)
+		numberOfContainers := uint64(taskStat.TaskMetadata.NumberContainers)
+		networkAdaptorStatistics, err := taskStat.statsRetriever.GetNetworkAdapterStatisticsPerContainer(device, numberOfContainers)
 		if err != nil {
 			return nil, err
 		}
@@ -108,68 +75,4 @@ func (taskStat *StatsTask) retrieveNetworkStatistics() (map[string]dockerstats.N
 	}
 
 	return networkStats, nil
-}
-
-// getNetworkAdaptorStatistics returns the network statistics per container for the given network interface.
-func (taskStat *StatsTask) getNetworkAdaptorStatistics(device string) (*dockerstats.NetworkStats, error) {
-	// Ref: https://docs.microsoft.com/en-us/powershell/module/netadapter/get-netadapterstatistics?view=windowsserver2019-ps
-	// The Get-NetAdapterStatistics cmdlet gets networking statistics from a network adapter.
-	// The statistics include broadcast, multicast, discards, and errors.
-	cmd := "Get-NetAdapterStatistics -Name \"" + device + "\" | Format-List -Property *"
-	out, err := execCommand("powershell", "-Command", cmd).CombinedOutput()
-
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to run Get-NetAdapterStatistics for %s", device)
-	}
-	str := string(out)
-
-	// Extract rawStats from the cmdlet output.
-	lines := strings.Split(str, "\n")
-	rawStats := make(map[string]string)
-	for _, line := range lines {
-		// populate all the network metrics in a map
-		kv := strings.Split(line, ":")
-		if len(kv) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(kv[0])
-		value := strings.TrimSpace(kv[1])
-		rawStats[key] = value
-	}
-
-	// Parse the required fields from the generated map.
-	parsedStats := make(map[string]uint64)
-	for _, key := range networkStatKeys {
-		value, err := taskStat.getMapValue(rawStats, key)
-		if err != nil {
-			return nil, err
-		}
-		parsedStats[key] = value
-	}
-
-	numberOfContainers := uint64(taskStat.TaskMetadata.NumberContainers)
-
-	return &dockerstats.NetworkStats{
-		RxBytes:   parsedStats[receivedBytes] / numberOfContainers,
-		RxPackets: (parsedStats[receivedBroadcastPackets] + parsedStats[receivedMulticastPackets] + parsedStats[receivedUnicastPackets]) / numberOfContainers,
-		RxErrors:  parsedStats[receivedPacketErrors] / numberOfContainers,
-		RxDropped: parsedStats[receivedDiscardedPackets] / numberOfContainers,
-		TxBytes:   parsedStats[sentBytes] / numberOfContainers,
-		TxPackets: (parsedStats[sentBroadcastPackets] + parsedStats[sentMulticastPackets] + parsedStats[sentUnicastPackets]) / numberOfContainers,
-		TxErrors:  parsedStats[outboundPacketErrors] / numberOfContainers,
-		TxDropped: parsedStats[outboundDiscardedPackets] / numberOfContainers,
-	}, nil
-}
-
-// getMapValue retrieves the value of the key from the given map.
-func (taskStat *StatsTask) getMapValue(m map[string]string, key string) (uint64, error) {
-	v, ok := m[key]
-	if !ok {
-		return 0, errors.Errorf("failed to find key: %s in output", key)
-	}
-	val, err := strconv.ParseUint(v, 10, 64)
-	if err != nil {
-		return 0, errors.Errorf("failed to parse network stats for %s with value: %s", key, v)
-	}
-	return val, nil
 }
