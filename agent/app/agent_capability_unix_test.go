@@ -866,53 +866,6 @@ func TestCapabilitiesUnix(t *testing.T) {
 	}
 }
 
-func TestFirelensConfigCapabilitiesUnix(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	client := mock_dockerapi.NewMockDockerClient(ctrl)
-	mockMobyPlugins := mock_mobypkgwrapper.NewMockPlugins(ctrl)
-	mockCredentialsProvider := app_mocks.NewMockProvider(ctrl)
-	mockPauseLoader := mock_loader.NewMockLoader(ctrl)
-	conf := &config.Config{
-		PrivilegedDisabled: config.BooleanDefaultFalse{Value: config.ExplicitlyEnabled},
-	}
-
-	mockPauseLoader.EXPECT().IsLoaded(gomock.Any()).Return(true, nil)
-	mockServiceConnectManager := mock_serviceconnect.NewMockManager(ctrl)
-	mockServiceConnectManager.EXPECT().IsLoaded(gomock.Any()).Return(true, nil).AnyTimes()
-	mockServiceConnectManager.EXPECT().GetLoadedAppnetVersion().AnyTimes()
-	mockServiceConnectManager.EXPECT().GetCapabilitiesForAppnetInterfaceVersion("").AnyTimes()
-	gomock.InOrder(
-		client.EXPECT().SupportedVersions().Return([]dockerclient.DockerVersion{
-			dockerclient.Version_1_17,
-		}),
-		client.EXPECT().KnownVersions().Return([]dockerclient.DockerVersion{
-			dockerclient.Version_1_17,
-		}),
-		mockMobyPlugins.EXPECT().Scan().AnyTimes().Return([]string{}, nil),
-		client.EXPECT().ListPluginsWithFilters(gomock.Any(), gomock.Any(), gomock.Any(),
-			gomock.Any()).AnyTimes().Return([]string{}, nil),
-	)
-
-	ctx, cancel := context.WithCancel(context.TODO())
-	// Cancel the context to cancel async routines
-	defer cancel()
-	agent := &ecsAgent{
-		ctx:                   ctx,
-		cfg:                   conf,
-		dockerClient:          client,
-		pauseLoader:           mockPauseLoader,
-		credentialProvider:    aws_credentials.NewCredentials(mockCredentialsProvider),
-		mobyPlugins:           mockMobyPlugins,
-		serviceconnectManager: mockServiceConnectManager,
-	}
-	capabilities, err := agent.capabilities()
-	assert.NoError(t, err)
-
-	assert.Contains(t, capabilities, &ecs.Attribute{Name: aws.String(attributePrefix + capabilityFirelensConfigFile)})
-	assert.Contains(t, capabilities, &ecs.Attribute{Name: aws.String(attributePrefix + capabilityFirelensConfigS3)})
-}
-
 func TestAppendGMSACapabilities(t *testing.T) {
 	var inputCapabilities []*ecs.Attribute
 
