@@ -32,10 +32,9 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pborman/uuid v0.0.0-20150603214016-ca53cad383ca
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v0.9.4
-	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
-	github.com/prometheus/common v0.4.1
-	github.com/prometheus/procfs v0.6.0 // indirect
+	github.com/prometheus/client_golang v1.13.0
+	github.com/prometheus/client_model v0.2.0
+	github.com/prometheus/common v0.37.0
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.0
 	go.etcd.io/bbolt v1.3.6
