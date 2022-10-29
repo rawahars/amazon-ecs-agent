@@ -186,7 +186,14 @@ func TestSupportedCapabilitiesWindows(t *testing.T) {
 		attributePrefix + capabilityContainerOrdering,
 		attributePrefix + capabilityFullTaskSync,
 		attributePrefix + capabilityEnvFilesS3,
-		attributePrefix + taskENIBlockInstanceMetadataAttributeSuffix}
+		attributePrefix + taskENIBlockInstanceMetadataAttributeSuffix,
+		attributePrefix + capabilityFirelensFluentd,
+		attributePrefix + capabilityFirelensFluentbit,
+		capabilityPrefix + capabilityFirelensLoggingDriver,
+		attributePrefix + capabilityFirelensLoggingDriver + capabilityFireLensLoggingDriverConfigBufferLimitSuffix,
+		attributePrefix + capabilityFirelensConfigFile,
+		attributePrefix + capabilityFirelensConfigS3,
+	}
 
 	var expectedCapabilities []*ecs.Attribute
 	for _, name := range expectedCapabilityNames {
