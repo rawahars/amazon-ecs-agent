@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +41,21 @@ const (
 	containerExecID = "container1234"
 )
 
+func fakeExecCommand(command string, args ...string) *exec.Cmd {
+	cs := []string{"-test.run=TestHelperProcess", "--", command}
+	cs = append(cs, args...)
+	cmd := exec.Command(os.Args[0], cs...)
+	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+	return cmd
+}
+
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	os.Exit(0)
+}
+
 // getECSBridgeResult returns an instance of current.Result.
 func getECSBridgeResult() *current.Result {
 	return &current.Result{
@@ -49,6 +66,15 @@ func getECSBridgeResult() *current.Result {
 			},
 		}},
 	}
+}
+
+func TestConfigureTaskENINamespaceProperties(t *testing.T) {
+	execCommand = fakeExecCommand
+	defer func() { execCommand = exec.Command }()
+
+	nsHelper := NewNamespaceHelper(nil)
+	err := nsHelper.ConfigureTaskENINamespaceProperties(getTaskENI())
+	assert.NoError(t, err)
 }
 
 func TestConfigureTaskNamespaceRouting(t *testing.T) {

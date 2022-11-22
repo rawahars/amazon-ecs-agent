@@ -51,6 +51,20 @@ func (m *MockNamespaceHelper) EXPECT() *MockNamespaceHelperMockRecorder {
 	return m.recorder
 }
 
+// ConfigureTaskENINamespaceProperties mocks base method
+func (m *MockNamespaceHelper) ConfigureTaskENINamespaceProperties(arg0 *eni.ENI) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConfigureTaskENINamespaceProperties", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ConfigureTaskENINamespaceProperties indicates an expected call of ConfigureTaskENINamespaceProperties
+func (mr *MockNamespaceHelperMockRecorder) ConfigureTaskENINamespaceProperties(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureTaskENINamespaceProperties", reflect.TypeOf((*MockNamespaceHelper)(nil).ConfigureTaskENINamespaceProperties), arg0)
+}
+
 // ConfigureTaskNamespaceRouting mocks base method
 func (m *MockNamespaceHelper) ConfigureTaskNamespaceRouting(arg0 context.Context, arg1 *eni.ENI, arg2 *ecscni.Config, arg3 *current.Result) error {
 	m.ctrl.T.Helper()

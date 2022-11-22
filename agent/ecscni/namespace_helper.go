@@ -25,6 +25,7 @@ import (
 // Task namespace in awsvpc network mode is configured using pause container which is the first container
 // launched for the task. These commands are executed inside that container.
 type NamespaceHelper interface {
+	ConfigureTaskENINamespaceProperties(taskENI *apieni.ENI) error
 	ConfigureTaskNamespaceRouting(ctx context.Context, taskENI *apieni.ENI, config *Config, result *current.Result) error
 }
 

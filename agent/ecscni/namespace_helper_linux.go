@@ -28,3 +28,9 @@ import (
 func (nsHelper *helper) ConfigureTaskNamespaceRouting(ctx context.Context, taskENI *apieni.ENI, config *Config, result *current.Result) error {
 	return nil
 }
+
+// ConfigureTaskENINamespaceProperties configures the properties of task ENI required in task namespace.
+// No-op for non-Windows platforms.
+func (nsHelper *helper) ConfigureTaskENINamespaceProperties(taskENI *apieni.ENI) error {
+	return nil
+}

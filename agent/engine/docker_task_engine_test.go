@@ -1033,6 +1033,7 @@ func TestProvisionContainerResourcesAwsvpcSetPausePIDInVolumeResources(t *testin
 		}, nil),
 		mockCNIClient.EXPECT().SetupNS(gomock.Any(), gomock.Any(), gomock.Any()).Return(nsResult, nil),
 		mockNamespaceHelper.EXPECT().ConfigureTaskNamespaceRouting(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+		mockNamespaceHelper.EXPECT().ConfigureTaskENINamespaceProperties(testTask.GetPrimaryENI()).Return(nil),
 	)
 
 	require.Nil(t, taskEngine.(*DockerTaskEngine).provisionContainerResources(testTask, pauseContainer).Error)

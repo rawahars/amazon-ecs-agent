@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os/exec"
 	"strings"
 
 	apieni "github.com/aws/amazon-ecs-agent/agent/api/eni"
@@ -29,6 +30,9 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/pkg/errors"
 )
+
+// Making it visible for unit testing
+var execCommand = exec.Command
 
 const (
 	// containerAdminUser is the admin username for any container on Windows.
@@ -47,7 +51,28 @@ const (
 	windowsRouteAddCmdFormat = `netsh interface ipv4 add route prefix=%s interface="%s"`
 	// windowsRouteDeleteCmdFormat is the format of command for deleting route entry on Windowsx.
 	windowsRouteDeleteCmdFormat = `netsh interface ipv4 delete route prefix=%s interface="%s"`
+	// windowsSetInfiniteENILifetimeCmdFormat is the format of the command for setting task ENI lifetime to be infinite.
+	windowsSetInfiniteENILifetimeCmdFormat = `Set-NetIPAddress -IPAddress %s -ValidLifetime ([TimeSpan]::MaxValue) -PreferredLifetime ([TimeSpan]::MaxValue) -IncludeAllCompartments`
 )
+
+// ConfigureTaskENINamespaceProperties configures the properties of task ENI required in task namespace.
+// For Windows, we execute the following commands in host namespace-
+// Set-NetIPAddress -IPAddress <TASK_IP> -ValidLifetime ([TimeSpan]::MaxValue) -PreferredLifetime ([TimeSpan]::MaxValue) -IncludeAllCompartments
+func (nsHelper *helper) ConfigureTaskENINamespaceProperties(taskENI *apieni.ENI) error {
+	//When an instance is launched in private subnet and the task ENI is also launched in private subnet,
+	// then the IP address of the task ENI is provided a finite lifetime after which it would be reset to
+	// a link-local IP address. To mitigate around this issue, we run the following command from host namespace,
+	// which would set the IP address lifetime of task ENI to be infinite.
+	//Reference issue: https://github.com/microsoft/hcsshim/issues/1419
+	cmd := fmt.Sprintf(windowsSetInfiniteENILifetimeCmdFormat, taskENI.GetPrimaryIPv4Address())
+	out, err := execCommand("powershell", "-Command", cmd).CombinedOutput()
+	seelog.Debugf("[ECSCNI] Setting task eni lifetime to infinite: %v", string(out))
+	if err != nil {
+		return errors.Wrapf(err, "failed to set task eni lifetime to infinite")
+	}
+
+	return nil
+}
 
 // ConfigureTaskNamespaceRouting executes the commands required for setting up appropriate routing inside task namespace.
 // The commands currently executed are-

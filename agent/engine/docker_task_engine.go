@@ -1797,6 +1797,20 @@ func (engine *DockerTaskEngine) provisionContainerResourcesAwsvpc(task *apitask.
 		}
 	}
 
+	// After the task namespace setup is complete, invoke any additional commands required for network configuration.
+	err = engine.namespaceHelper.ConfigureTaskENINamespaceProperties(task.GetPrimaryENI())
+	if err != nil {
+		logger.Error("Unable to configure task eni properties", logger.Fields{
+			field.TaskID: task.GetID(),
+			field.Error:  err,
+		})
+		return dockerapi.DockerContainerMetadata{
+			DockerID: cniConfig.ContainerID,
+			Error: ContainerNetworkingError{fmt.Errorf(
+				"container resource provisioning: failed to configure task eni properties: %+v", err)},
+		}
+	}
+
 	return dockerapi.MetadataFromContainer(containerInspectOutput)
 }
 
