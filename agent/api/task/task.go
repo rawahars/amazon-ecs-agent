@@ -2052,6 +2052,8 @@ func (task *Task) shouldOverrideNetworkMode(container *apicontainer.Container, d
 		if container.Type == apicontainer.ContainerCNIPause {
 			if task.IsNetworkModeAWSVPC() {
 				return true, networkModeNone
+			} else if task.IsNetworkModeBridge() && config.DefaultConfig().ExperimentalEnableBridgeCniPlugin.Enabled() {
+				return true, networkModeNone
 			} else if task.IsNetworkModeBridge() && task.IsServiceConnectEnabled() {
 				return true, BridgeNetworkMode
 			}
@@ -2068,6 +2070,8 @@ func (task *Task) shouldOverrideNetworkMode(container *apicontainer.Container, d
 	// indicates the need to configure the network mode outside of supported
 	// network drivers
 	if task.IsNetworkModeAWSVPC() {
+		return task.shouldOverrideNetworkModeAwsvpc(container, dockerContainerMap)
+	} else if task.IsNetworkModeBridge() && config.DefaultConfig().ExperimentalEnableBridgeCniPlugin.Enabled() {
 		return task.shouldOverrideNetworkModeAwsvpc(container, dockerContainerMap)
 	} else if task.IsNetworkModeBridge() && task.IsServiceConnectEnabled() {
 		return task.shouldOverrideNetworkModeServiceConnectBridge(container, dockerContainerMap)
