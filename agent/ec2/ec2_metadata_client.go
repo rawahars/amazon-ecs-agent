@@ -46,6 +46,7 @@ const (
 	PrivateENIHostNameResource                = "network/interfaces/macs/%s/local-hostname"
 	SubnetIPv4CIDRBlockResource               = "network/interfaces/macs/%s/subnet-ipv4-cidr-block"
 	EniIPPrefixListResource                   = "network/interfaces/macs/%s/ipv4-prefix"
+	EniID                                     = "network/interfaces/macs/%s/interface-id"
 )
 
 const (
@@ -94,6 +95,7 @@ type EC2MetadataClient interface {
 	PrivateENIHostName(mac string) (string, error)
 	SubnetIPv4CIDRBlock(mac string) (string, error)
 	EniIPPrefixList(mac string) (string, error)
+	ENIID(mac string) (string, error)
 }
 
 type ec2MetadataClientImpl struct {
@@ -243,4 +245,8 @@ func (c *ec2MetadataClientImpl) SubnetIPv4CIDRBlock(mac string) (string, error) 
 // EniIPPrefixList returns the prefix that has been delegated to the ENI
 func (c *ec2MetadataClientImpl) EniIPPrefixList(mac string) (string, error) {
 	return c.client.GetMetadata(fmt.Sprintf(EniIPPrefixListResource, mac))
+}
+
+func (c *ec2MetadataClientImpl) ENIID(mac string) (string, error) {
+	return c.client.GetMetadata(fmt.Sprintf(EniID, mac))
 }

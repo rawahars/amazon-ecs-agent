@@ -14,6 +14,7 @@
 package ec2
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/aws/amazon-ecs-agent/agent/credentials/instancecreds"
@@ -39,11 +40,13 @@ const (
 type Client interface {
 	CreateTags(input *ec2sdk.CreateTagsInput) (*ec2sdk.CreateTagsOutput, error)
 	DescribeECSTagsForInstance(instanceID string) ([]*ecs.Tag, error)
+	AssignPrivateIpAddressToENI(eniID string) (string, error)
 }
 
 type ClientSDK interface {
 	CreateTags(input *ec2sdk.CreateTagsInput) (*ec2sdk.CreateTagsOutput, error)
 	DescribeTags(input *ec2sdk.DescribeTagsInput) (*ec2sdk.DescribeTagsOutput, error)
+	AssignPrivateIpAddresses(input *ec2sdk.AssignPrivateIpAddressesInput) (*ec2sdk.AssignPrivateIpAddressesOutput, error)
 }
 
 type ClientImpl struct {
@@ -64,6 +67,20 @@ func NewClientImpl(awsRegion string) Client {
 // test implementation
 func (c *ClientImpl) SetClientSDK(sdk ClientSDK) {
 	c.client = sdk
+}
+
+func (c *ClientImpl) AssignPrivateIpAddressToENI(eniID string) (string, error) {
+	input := &ec2sdk.AssignPrivateIpAddressesInput{
+		NetworkInterfaceId:             aws.String(eniID),
+		SecondaryPrivateIpAddressCount: aws.Int64(1),
+	}
+
+	res, err := c.client.AssignPrivateIpAddresses(input)
+	if err != nil {
+		return "", fmt.Errorf("unable to assign a secondary IP address to the ENI: %w", err)
+	}
+
+	return aws.StringValue(res.AssignedPrivateIpAddresses[0].PrivateIpAddress), nil
 }
 
 // DescribeECSTagsForInstance calls DescribeTags API to get the EC2 tags of the

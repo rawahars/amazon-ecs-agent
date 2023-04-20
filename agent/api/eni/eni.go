@@ -467,7 +467,7 @@ func PrimaryENIFromIMDS() (*ENI, error) {
 		InterfaceVlanProperties:      nil,
 	}
 
-	seelog.Debugf("%+v", eni)
+	seelog.Debugf("#### VPC-BRIDGE INSTANCE ENI- %+v", eni)
 
 	return eni, nil
 }

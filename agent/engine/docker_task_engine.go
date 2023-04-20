@@ -2081,9 +2081,22 @@ func (engine *DockerTaskEngine) buildCNIConfigFromTaskContainerVpcBridge(
 	logger.Debug("In agent/engine/docker_task_engine.go:2092")
 	containerPid := strconv.Itoa(containerInspectOutput.State.Pid)
 	cniConfig := &ecscni.Config{
-		MinSupportedCNIVersion: config.DefaultMinSupportedCNIVersion,
-		ContainerPID:           containerPid,
-		ContainerID:            containerInspectOutput.ID,
+		BlockInstanceMetadata:    engine.cfg.AWSVPCBlockInstanceMetdata.Enabled(),
+		MinSupportedCNIVersion:   config.DefaultMinSupportedCNIVersion,
+		InstanceENIDNSServerList: engine.cfg.InstanceENIDNSServerList,
+		ContainerPID:             containerPid,
+		ContainerID:              containerInspectOutput.ID,
+		ContainerNetNS:           "",
+	}
+
+	// For pause containers, NetNS would be none
+	// For other containers, NetNS would be of format container:<pause_container_ID>
+	if containerInspectOutput.HostConfig.NetworkMode.IsNone() {
+		cniConfig.ContainerNetNS = containerInspectOutput.HostConfig.NetworkMode.NetworkName()
+	} else if containerInspectOutput.HostConfig.NetworkMode.IsContainer() {
+		cniConfig.ContainerNetNS = fmt.Sprintf("container:%s", containerInspectOutput.HostConfig.NetworkMode.ConnectedContainer())
+	} else {
+		return nil, errors.New("engine: failed to build cni configuration from the task due to invalid container network namespace")
 	}
 
 	logger.Debug(fmt.Sprintf("cniConfig before: %+v", cniConfig), logger.Fields{
@@ -2092,7 +2105,7 @@ func (engine *DockerTaskEngine) buildCNIConfigFromTaskContainerVpcBridge(
 		field.Container: containerName,
 	})
 
-	cniConfig, err := task.BuildCNIConfigVpcBridge(cniConfig, containerName)
+	cniConfig, err := task.BuildCNIConfigVpcBridge(cniConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "engine: failed to build cni configuration from task")
 	}

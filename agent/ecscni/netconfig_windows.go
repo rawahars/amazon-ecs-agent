@@ -17,6 +17,8 @@
 package ecscni
 
 import (
+	"fmt"
+	"github.com/aws/amazon-ecs-agent/agent/ec2"
 	"regexp"
 
 	"github.com/aws/amazon-ecs-agent/agent/api/eni"
@@ -67,6 +69,63 @@ func NewVPCENIPluginConfigForTaskNSSetup(eni *eni.ENI, cfg *Config) (*libcni.Net
 	}
 
 	networkConfig.Network.Name = TaskHNSNetworkNamePrefix
+	return networkConfig, nil
+}
+
+// NewVPCBridgePluginConfigForTaskNSSetup is used to create the configuration of vpc-bridge plugin for task namespace setup.
+func NewVPCBridgePluginConfigForTaskNSSetup(eni *eni.ENI, cfg *Config) (*libcni.NetworkConfig, error) {
+	seelog.Debug("****************** VPC-BRIDGE PATH ENGAGED ******************")
+	seelog.Debug("In agent/ecscni/netconfig_linux.go:246")
+
+	// Use the DNS server addresses of the instance ENI it would belong in the same VPC as
+	// the task ENI and therefore, have same DNS configuration.
+	dns := types.DNS{
+		Nameservers: cfg.InstanceENIDNSServerList,
+	}
+
+	// Validate MAC Address, ENI IP Address and ENI Gateway address used for CNI plugin configuration.
+	// Other params are generated at runtime and are considered safe.
+	if !isValid(eni.MacAddress) || !isValid(eni.GetPrimaryIPv4AddressWithPrefixLength()) ||
+		!isValid(eni.GetSubnetGatewayIPv4Address()) {
+		return nil, errors.New("failed to create vpc-eni plugin configuration for setting up " +
+			"task network namespace due to failed data validation")
+	}
+
+	ec2Metadata := ec2.NewEC2MetadataClient(nil)
+	region, err := ec2Metadata.Region()
+	if err != nil {
+		return nil, fmt.Errorf("VPC-BRIDGE: failed to obtain region from IMDS: %w", err)
+	}
+	eniID, err := ec2Metadata.ENIID(eni.MacAddress)
+	if err != nil {
+		return nil, fmt.Errorf("VPC-BRIDGE: failed to obtain ENI ID from IMDS: %w", err)
+	}
+
+	ec2Client := ec2.NewClientImpl(region)
+	assignedIP, err := ec2Client.AssignPrivateIpAddressToENI(eniID)
+	if err != nil {
+		return nil, fmt.Errorf("VPC-BRIDGE: failed to assign IP address to the ENI: %w", err)
+	}
+
+	vpcBridgeNetConf := VPCBridgePluginConfig{
+		Type:             ECSVPCBridgePluginName,
+		DNS:              dns,
+		ENIName:          eni.GetLinkName(),
+		ENIMACAddress:    eni.MacAddress,
+		ENIIPAddresses:   eni.GetIPAddressesWithPrefixLength(),
+		IPAddresses:      []string{assignedIP},
+		GatewayIPAddress: eni.GetSubnetGatewayIPv4Address(),
+		BlockIMDS:        cfg.BlockInstanceMetadata,
+	}
+
+	seelog.Debugf("%+v", vpcBridgeNetConf)
+
+	networkConfig, err := newNetworkConfig(vpcBridgeNetConf, ECSVPCBridgePluginExecutable, cfg.MinSupportedCNIVersion)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create vpc-bridge plugin configuration for setting up task network namespace")
+	}
+
+	networkConfig.Network.Name = VPCBridgeHNSNetworkNamePrefix
 	return networkConfig, nil
 }
 

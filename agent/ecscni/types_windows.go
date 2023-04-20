@@ -27,10 +27,18 @@ const (
 	ECSVPCENIPluginName = "vpc-eni"
 	// ECSVPCENIPluginExecutable is the name of vpc-eni executable.
 	ECSVPCENIPluginExecutable = "vpc-eni.exe"
+
+	// ECSVPCBridgePluginName is the name of the vpc-bridge plugin.
+	ECSVPCBridgePluginName = "vpc-bridge"
+	// ECSVPCBridgePluginExecutable is the name of vpc-bridge executable.
+	ECSVPCBridgePluginExecutable = "vpc-bridge.exe"
+
 	// TaskHNSNetworkNamePrefix is the prefix of the HNS network used for task ENI.
 	TaskHNSNetworkNamePrefix = "task"
+	// VPCBridgeHNSNetworkNamePrefix is the prefix of the HNS network used for VPC Bridge mode.
+	VPCBridgeHNSNetworkNamePrefix = "vpc-bridge"
 	// ECSBridgeNetworkName is the name of the HNS network used as ecs-bridge.
-	ECSBridgeNetworkName = "nat"
+	ECSBridgeNetworkName = "ecs-bridge"
 	// Starting with CNI plugin v0.8.0 (this PR https://github.com/containernetworking/cni/pull/698)
 	// NetworkName has to be non-empty field for network config.
 	// We do not actually make use of the field, hence passing in a placeholder string to fulfill the API spec
@@ -70,4 +78,41 @@ type VPCENIPluginConfig struct {
 	UseExistingNetwork bool `json:"useExistingNetwork"`
 	// BlockIMDS specifies if the IMDS should be blocked for the created endpoint.
 	BlockIMDS bool `json:"blockInstanceMetadata"`
+}
+
+// VPCBridgePluginConfig contains all the information required to invoke vpc-bridge plugin.
+type VPCBridgePluginConfig struct {
+	// Type is the cni plugin name.
+	Type string `json:"type,omitempty"`
+	// CNIVersion is the cni spec version to use.
+	CNIVersion string `json:"cniVersion,omitempty"`
+	// DNS is used to pass DNS information to the plugin.
+	DNS types.DNS `json:"dns"`
+
+	// EniName is the name of the ENI to use for the bridge
+	ENIName string `json:"eniName"`
+	// EniMacAddress is the address of the ENI
+	ENIMACAddress string `json:"eniMacAddress"`
+	// EniIPAddresses are the IP addresses assigned to the ENI
+	ENIIPAddresses []string `json:"eniIPAddresses"`
+	// VPCCIDRs are the CIDR blocks assigned to the VPC
+	VPCCIDRs []string `json:"vpcCIDRs"`
+	// BridgeType is one of "L2" or "L3", defaults to "L3"
+	BridgeType string `json:"bridgeType"`
+	// BridgeNetNSPath is the namespace that the vpc-bridge
+	// will be created in, "" by default
+	BridgeNetNSPath string `json:"bridgeNetNSPath"`
+	// IPAddresses are the addresses that will be assigned to the
+	// other end of the veth pair connected to the bridge
+	IPAddresses []string `json:"ipAddresses"`
+	// GatewayIPAddres is the address of the gateway, likely the
+	// gateway of the subnet that this ENI exists in
+	GatewayIPAddress string `json:"gatewayIPAddress"`
+	// InterfaceType is one of "veth" or "tap", defaults to "veth"
+	InterfaceType string `json:"interfaceType"`
+	// TapUserID is the ID of the linux user that owns the tap interface
+	TapUserID      string   `json:"tapUserID"`
+	BlockIMDS      bool     `json:"blockInstanceMetadata"`
+	RoutesToAdd    []string `json:"routesToAdd"`
+	RoutesToDelete []string `json:"routesToDelete"`
 }

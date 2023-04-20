@@ -108,3 +108,7 @@ func (blackholeMetadataClient) SubnetIPv4CIDRBlock(mac string) (string, error) {
 func (blackholeMetadataClient) EniIPPrefixList(mac string) (string, error) {
 	return "", errors.New("blackholed")
 }
+
+func (blackholeMetadataClient) ENIID(mac string) (string, error) {
+	return "", errors.New("blackholed")
+}
