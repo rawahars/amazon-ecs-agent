@@ -1938,7 +1938,8 @@ func (engine *DockerTaskEngine) provisionContainerResourcesVpcBridge(task *apita
 // checkTearDownPauseContainer idempotently tears down the pause container network when the pause container's known
 // or desired status is stopped.
 func (engine *DockerTaskEngine) checkTearDownPauseContainer(task *apitask.Task) {
-	if !task.IsNetworkModeAWSVPC() || (task.IsNetworkModeBridge() && !task.IsServiceConnectEnabled()) {
+	if !task.IsNetworkModeAWSVPC() || (task.IsNetworkModeBridge() && !task.IsServiceConnectEnabled()) ||
+		(task.IsNetworkModeBridge() && !config.DefaultConfig().ExperimentalEnableBridgeCniPlugin.Enabled()) {
 		return
 	}
 	for _, container := range task.Containers {
@@ -1987,6 +1988,8 @@ func (engine *DockerTaskEngine) cleanupPauseContainerNetwork(task *apitask.Task,
 	var cniConfig *ecscni.Config
 	if task.IsNetworkModeAWSVPC() {
 		cniConfig, err = engine.buildCNIConfigFromTaskContainerAwsvpc(task, containerInspectOutput, false)
+	} else if task.IsNetworkModeBridge() && config.DefaultConfig().ExperimentalEnableBridgeCniPlugin.Enabled() {
+		cniConfig, err = engine.buildCNIConfigFromTaskContainerVpcBridge(task, containerInspectOutput, container.Name)
 	} else if task.IsNetworkModeBridge() && task.IsServiceConnectEnabled() {
 		cniConfig, err = engine.buildCNIConfigFromTaskContainerBridgeMode(task, containerInspectOutput, container.Name)
 	} else {
@@ -2160,7 +2163,8 @@ func (engine *DockerTaskEngine) stopContainer(task *apitask.Task, container *api
 
 	// Cleanup the pause container network namespace before stop the container
 	if container.Type == apicontainer.ContainerCNIPause {
-		if task.IsNetworkModeAWSVPC() || (task.IsNetworkModeBridge() && task.IsServiceConnectEnabled()) {
+		if task.IsNetworkModeAWSVPC() || (task.IsNetworkModeBridge() && task.IsServiceConnectEnabled()) ||
+			task.IsNetworkModeBridge() && config.DefaultConfig().ExperimentalEnableBridgeCniPlugin.Enabled() {
 			err := engine.cleanupPauseContainerNetwork(task, container)
 			if err != nil {
 				logger.Error("Unable to cleanup pause container network namespace", logger.Fields{
