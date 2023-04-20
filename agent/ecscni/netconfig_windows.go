@@ -113,7 +113,7 @@ func NewVPCBridgePluginConfigForTaskNSSetup(eni *eni.ENI, cfg *Config) (*libcni.
 		ENIName:          eni.GetLinkName(),
 		ENIMACAddress:    eni.MacAddress,
 		ENIIPAddresses:   eni.GetIPAddressesWithPrefixLength(),
-		IPAddresses:      []string{assignedIP},
+		IPAddresses:      []string{fmt.Sprintf("%s/32", assignedIP)},
 		GatewayIPAddress: eni.GetSubnetGatewayIPv4Address(),
 		BlockIMDS:        cfg.BlockInstanceMetadata,
 	}
