@@ -33,12 +33,6 @@ import (
 const (
 	// containerAdminUser is the admin username for any container on Windows.
 	containerAdminUser = "ContainerAdministrator"
-	// windowsDefaultRoute is the default route of any endpoint.
-	windowsDefaultRoute = "0.0.0.0/0"
-	// credentialsEndpointRoute is the route of credentials endpoint for accessing task iam roles/task metadata.
-	credentialsEndpointRoute = "169.254.170.2/32"
-	// imdsEndpointIPAddress is the IP address of the endpoint for accessing IMDS.
-	imdsEndpointIPAddress = "169.254.169.254/32"
 	// ecsBridgeEndpointNameFormat is the name format of the ecs-bridge endpoint in the task namespace.
 	ecsBridgeEndpointNameFormat = "vEthernet (%s-ep-%s)"
 	// taskPrimaryEndpointNameFormat is the name format of the primary endpoint in the task namespace.

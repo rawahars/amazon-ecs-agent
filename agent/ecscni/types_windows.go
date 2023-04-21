@@ -39,6 +39,15 @@ const (
 	VPCBridgeHNSNetworkNamePrefix = "vpc-bridge"
 	// ECSBridgeNetworkName is the name of the HNS network used as ecs-bridge.
 	ECSBridgeNetworkName = "ecs-bridge"
+
+	// windowsDefaultRoute is the default route of any endpoint.
+	windowsDefaultRoute = "0.0.0.0/0"
+	// credentialsEndpointRoute is the route of credentials endpoint for accessing task iam roles/task metadata.
+	credentialsEndpointRoute = "169.254.170.2/32"
+	// imdsEndpointIPAddress is the IP address of the endpoint for accessing IMDS.
+	imdsEndpointIPAddress = "169.254.169.254/32"
+	ecsBridgeSubnet       = "169.254.172.0/22"
+
 	// Starting with CNI plugin v0.8.0 (this PR https://github.com/containernetworking/cni/pull/698)
 	// NetworkName has to be non-empty field for network config.
 	// We do not actually make use of the field, hence passing in a placeholder string to fulfill the API spec

@@ -1927,6 +1927,20 @@ func (engine *DockerTaskEngine) provisionContainerResourcesVpcBridge(task *apita
 		}
 	}
 
+	// Invoke additional commands required to configure the task namespace routing.
+	err = engine.namespaceHelper.ConfigureTaskNamespaceRouting(engine.ctx, task.GetPrimaryENI(), cniConfig, result)
+	if err != nil {
+		logger.Error("Unable to configure pause container namespace", logger.Fields{
+			field.TaskID: task.GetID(),
+			field.Error:  err,
+		})
+		return dockerapi.DockerContainerMetadata{
+			DockerID: cniConfig.ContainerID,
+			Error: ContainerNetworkingError{fmt.Errorf(
+				"container resource provisioning: failed to setup network namespace: %+v", err)},
+		}
+	}
+
 	logger.Info(fmt.Sprintf("Successfully configured pause netns, result: %+v", result), logger.Fields{
 		field.TaskID:    task.GetID(),
 		field.Container: container.Name,
