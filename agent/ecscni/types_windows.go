@@ -98,6 +98,9 @@ type VPCBridgePluginConfig struct {
 	// DNS is used to pass DNS information to the plugin.
 	DNS types.DNS `json:"dns"`
 
+	NetworkType   string             `json:"networkType"`
+	NetworkSubnet string             `json:"networkSubnet"`
+	PortMappings  []PortMappingEntry `json:"portMappings"`
 	// EniName is the name of the ENI to use for the bridge
 	ENIName string `json:"eniName"`
 	// EniMacAddress is the address of the ENI
@@ -124,4 +127,10 @@ type VPCBridgePluginConfig struct {
 	BlockIMDS      bool     `json:"blockInstanceMetadata"`
 	RoutesToAdd    []string `json:"routesToAdd"`
 	RoutesToDelete []string `json:"routesToDelete"`
+}
+
+type PortMappingEntry struct {
+	Protocol      string `json:"protocol"`
+	ContainerPort int    `json:"containerPort"`
+	HostPort      int    `json:"hostPort"`
 }

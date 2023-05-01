@@ -14,6 +14,7 @@
 package ecscni
 
 import (
+	"github.com/aws/amazon-ecs-agent/agent/api/container"
 	"github.com/containernetworking/cni/libcni"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 )
@@ -63,6 +64,7 @@ type Config struct {
 	// InstanceENIDNSServerList stores the list of dns servers for the primary instance ENI.
 	// Currently, this field is only populated for Windows and is used during task networking setup.
 	InstanceENIDNSServerList []string
+	PortMappings             []container.PortBinding
 }
 
 // NetworkConfig wraps CNI library's NetworkConfig object. It tracks the interface device

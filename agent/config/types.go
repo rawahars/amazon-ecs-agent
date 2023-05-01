@@ -370,4 +370,9 @@ type Config struct {
 	// Enables using the vpc-bridge plugin to build bridge networks as an experiment
 	// rather than rely on Docker running containers in the docker0 bridge
 	ExperimentalEnableBridgeCniPlugin BooleanDefaultFalse
+
+	// EXPERIMENTAL - USE AT YOUR OWN RISK
+	// Enables port mapping mode for the VPC Bridge.
+	// It works only when using ExperimentalEnableBridgeCniPlugin
+	ExperimentalEnablePortMapBridgeMode BooleanDefaultFalse
 }

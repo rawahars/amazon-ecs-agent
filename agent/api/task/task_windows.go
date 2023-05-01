@@ -270,30 +270,42 @@ func (task *Task) BuildCNIConfigVpcBridge(cniConfig *ecscni.Config) (*ecscni.Con
 	seelog.Debug("****************** VPC-BRIDGE PATH ENGAGED ******************")
 	seelog.Debug("In agent/api/task/task_linux.go:384")
 
-	eni, err := apieni.PrimaryENIFromIMDS()
-	if err != nil {
-		return nil, err
+	if config.DefaultConfig().ExperimentalEnablePortMapBridgeMode.Enabled() {
+		netconf, err := ecscni.NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cniConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		cniConfig.NetworkConfigs = append(cniConfig.NetworkConfigs, &ecscni.NetworkConfig{
+			IfName:           ecscni.ECSBridgeNetworkName,
+			CNINetworkConfig: netconf,
+		})
+	} else {
+		eni, err := apieni.PrimaryENIFromIMDS()
+		if err != nil {
+			return nil, err
+		}
+
+		seelog.Debugf("%+v", eni)
+
+		netconf, err := ecscni.NewVPCBridgePluginConfigForTaskNSSetup(eni, cniConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		seelog.Debugf("%+v", netconf)
+
+		// IfName is expected by the plugin but is not used.
+		cniConfig.NetworkConfigs = append(cniConfig.NetworkConfigs, &ecscni.NetworkConfig{
+			IfName:           ecscni.DefaultENIName,
+			CNINetworkConfig: netconf,
+		})
+
+		seelog.Debugf("%+v", cniConfig)
 	}
-
-	seelog.Debugf("%+v", eni)
-
-	netconf, err := ecscni.NewVPCBridgePluginConfigForTaskNSSetup(eni, cniConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	seelog.Debugf("%+v", netconf)
-
-	// IfName is expected by the plugin but is not used.
-	cniConfig.NetworkConfigs = append(cniConfig.NetworkConfigs, &ecscni.NetworkConfig{
-		IfName:           ecscni.DefaultENIName,
-		CNINetworkConfig: netconf,
-	})
-
-	seelog.Debugf("%+v", cniConfig)
 
 	// Create the vpc-eni plugin configuration to setup ecs-bridge endpoint in the task namespace.
-	netconf, err = ecscni.NewVPCENIPluginConfigForECSBridgeSetup(cniConfig)
+	netconf, err := ecscni.NewVPCENIPluginConfigForECSBridgeSetup(cniConfig)
 	if err != nil {
 		return nil, err
 	}

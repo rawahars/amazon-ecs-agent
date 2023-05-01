@@ -2116,6 +2116,12 @@ func (engine *DockerTaskEngine) buildCNIConfigFromTaskContainerVpcBridge(
 		return nil, errors.New("engine: failed to build cni configuration from the task due to invalid container network namespace")
 	}
 
+	// Add the port mapping entries to the cni config
+	for _, container := range task.Containers {
+		ports := container.Ports
+		cniConfig.PortMappings = append(cniConfig.PortMappings, ports...)
+	}
+
 	logger.Debug(fmt.Sprintf("cniConfig before: %+v", cniConfig), logger.Fields{
 		field.TaskID:    task.GetID(),
 		field.DockerId:  containerInspectOutput.ID,

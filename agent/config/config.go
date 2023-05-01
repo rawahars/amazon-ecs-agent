@@ -598,6 +598,7 @@ func environmentConfig() (Config, error) {
 		WarmPoolsSupport:                    parseBooleanDefaultFalseConfig("ECS_WARM_POOLS_CHECK"),
 		DynamicHostPortRange:                parseDynamicHostPortRange("ECS_DYNAMIC_HOST_PORT_RANGE"),
 		ExperimentalEnableBridgeCniPlugin:   parseBooleanDefaultFalseConfig("ECS_LABS_ENABLE_BRIDGE_CNI_PLUGIN"),
+		ExperimentalEnablePortMapBridgeMode: parseBooleanDefaultFalseConfig("ECS_LABS_ENABLE_PORT_MAP_BRIDGE_MODE"),
 	}, err
 }
 
@@ -653,6 +654,7 @@ func (cfg *Config) String() string {
 		cfg.ShouldExcludeIPv6PortBinding,
 		cfg.DynamicHostPortRange,
 		cfg.ExperimentalEnableBridgeCniPlugin,
+		cfg.ExperimentalEnablePortMapBridgeMode,
 		cfg.platformString(),
 	)
 }

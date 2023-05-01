@@ -129,6 +129,39 @@ func NewVPCBridgePluginConfigForTaskNSSetup(eni *eni.ENI, cfg *Config) (*libcni.
 	return networkConfig, nil
 }
 
+// NewVPCBridgePluginConfigForPortMappingTaskNSSetup is used to create the configuration of vpc-bridge plugin for task namespace setup
+// when we have port mapping enabled.
+func NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cfg *Config) (*libcni.NetworkConfig, error) {
+	seelog.Debug("****************** VPC-BRIDGE PATH ENGAGED ******************")
+	seelog.Debug("In agent/ecscni/netconfig_linux.go:246")
+
+	vpcBridgeNetConf := VPCBridgePluginConfig{
+		Type:          ECSVPCBridgePluginName,
+		NetworkType:   "NAT",
+		NetworkSubnet: "169.254.140.0/19",
+		BlockIMDS:     cfg.BlockInstanceMetadata,
+	}
+
+	for _, portMap := range cfg.PortMappings {
+		portMapEntry := PortMappingEntry{
+			Protocol:      portMap.Protocol.String(),
+			ContainerPort: int(portMap.ContainerPort),
+			HostPort:      int(portMap.HostPort),
+		}
+		vpcBridgeNetConf.PortMappings = append(vpcBridgeNetConf.PortMappings, portMapEntry)
+	}
+
+	seelog.Debugf("%+v", vpcBridgeNetConf)
+
+	networkConfig, err := newNetworkConfig(vpcBridgeNetConf, ECSVPCBridgePluginExecutable, cfg.MinSupportedCNIVersion)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create vpc-bridge plugin configuration for setting up task network namespace")
+	}
+
+	networkConfig.Network.Name = "nat"
+	return networkConfig, nil
+}
+
 // NewVPCENIPluginConfigForECSBridgeSetup creates the configuration required by vpc-eni plugin to setup ecs-bridge endpoint for the task.
 func NewVPCENIPluginConfigForECSBridgeSetup(cfg *Config) (*libcni.NetworkConfig, error) {
 	bridgeConf := VPCENIPluginConfig{

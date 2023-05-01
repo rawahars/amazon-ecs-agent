@@ -151,6 +151,7 @@ func DefaultConfig() Config {
 		EnableRuntimeStats:                  BooleanDefaultFalse{Value: NotSet},
 		ShouldExcludeIPv6PortBinding:        BooleanDefaultTrue{Value: ExplicitlyEnabled},
 		ExperimentalEnableBridgeCniPlugin:   BooleanDefaultFalse{Value: ExplicitlyEnabled},
+		ExperimentalEnablePortMapBridgeMode: BooleanDefaultFalse{Value: ExplicitlyEnabled},
 	}
 }
 
