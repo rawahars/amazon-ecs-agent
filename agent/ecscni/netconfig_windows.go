@@ -135,31 +135,44 @@ func NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cfg *Config) (*libcni.Net
 	seelog.Debug("****************** VPC-BRIDGE PATH ENGAGED ******************")
 	seelog.Debug("In agent/ecscni/netconfig_linux.go:246")
 
-	vpcBridgeNetConf := VPCBridgePluginConfig{
-		Type:          ECSVPCBridgePluginName,
-		NetworkType:   "NAT",
-		NetworkSubnet: "169.254.140.0/19",
-		BlockIMDS:     cfg.BlockInstanceMetadata,
+	//vpcBridgeNetConf := VPCBridgePluginConfig{
+	//	Type:          ECSVPCBridgePluginName,
+	//	NetworkType:   "NAT",
+	//	NetworkSubnet: "169.254.140.0/19",
+	//	BlockIMDS:     cfg.BlockInstanceMetadata,
+	//}
+	bridgeConf := VPCENIPluginConfig{
+		Type:               ECSVPCENIPluginName,
+		UseExistingNetwork: true,
+		BlockIMDS:          cfg.BlockInstanceMetadata,
 	}
 
-	for _, portMap := range cfg.PortMappings {
-		portMapEntry := PortMappingEntry{
-			Protocol:      portMap.Protocol.String(),
-			ContainerPort: int(portMap.ContainerPort),
-			HostPort:      int(portMap.HostPort),
-		}
-		vpcBridgeNetConf.PortMappings = append(vpcBridgeNetConf.PortMappings, portMapEntry)
-	}
-
-	seelog.Debugf("%+v", vpcBridgeNetConf)
-
-	networkConfig, err := newNetworkConfig(vpcBridgeNetConf, ECSVPCBridgePluginExecutable, cfg.MinSupportedCNIVersion)
+	networkConfig, err := newNetworkConfig(bridgeConf, ECSVPCENIPluginExecutable, cfg.MinSupportedCNIVersion)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create vpc-bridge plugin configuration for setting up task network namespace")
+		return nil, errors.Wrap(err, "failed to create vpc-eni plugin configuration for setting up ecs-bridge endpoint of the task")
 	}
 
 	networkConfig.Network.Name = "nat"
 	return networkConfig, nil
+
+	//for _, portMap := range cfg.PortMappings {
+	//	portMapEntry := PortMappingEntry{
+	//		Protocol:      portMap.Protocol.String(),
+	//		ContainerPort: int(portMap.ContainerPort),
+	//		HostPort:      int(portMap.HostPort),
+	//	}
+	//	vpcBridgeNetConf.PortMappings = append(vpcBridgeNetConf.PortMappings, portMapEntry)
+	//}
+
+	//seelog.Debugf("%+v", vpcBridgeNetConf)
+	//
+	//networkConfig, err := newNetworkConfig(vpcBridgeNetConf, ECSVPCBridgePluginExecutable, cfg.MinSupportedCNIVersion)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "failed to create vpc-bridge plugin configuration for setting up task network namespace")
+	//}
+	//
+	//networkConfig.Network.Name = "nat"
+	//return networkConfig, nil
 }
 
 // NewVPCENIPluginConfigForECSBridgeSetup creates the configuration required by vpc-eni plugin to setup ecs-bridge endpoint for the task.

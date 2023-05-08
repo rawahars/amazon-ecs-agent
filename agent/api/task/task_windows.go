@@ -277,7 +277,7 @@ func (task *Task) BuildCNIConfigVpcBridge(cniConfig *ecscni.Config) (*ecscni.Con
 		}
 
 		cniConfig.NetworkConfigs = append(cniConfig.NetworkConfigs, &ecscni.NetworkConfig{
-			IfName:           ecscni.ECSBridgeNetworkName,
+			IfName:           ecscni.DefaultENIName,
 			CNINetworkConfig: netconf,
 		})
 	} else {
