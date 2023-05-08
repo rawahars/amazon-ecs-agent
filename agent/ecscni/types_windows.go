@@ -86,7 +86,8 @@ type VPCENIPluginConfig struct {
 	// UseExistingNetwork specifies if existing network should be used instead of creating a new one.
 	UseExistingNetwork bool `json:"useExistingNetwork"`
 	// BlockIMDS specifies if the IMDS should be blocked for the created endpoint.
-	BlockIMDS bool `json:"blockInstanceMetadata"`
+	BlockIMDS    bool               `json:"blockInstanceMetadata"`
+	PortMappings []PortMappingEntry `json:"portMappings"`
 }
 
 // VPCBridgePluginConfig contains all the information required to invoke vpc-bridge plugin.

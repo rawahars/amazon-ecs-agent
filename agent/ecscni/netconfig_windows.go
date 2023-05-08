@@ -147,6 +147,15 @@ func NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cfg *Config) (*libcni.Net
 		BlockIMDS:          cfg.BlockInstanceMetadata,
 	}
 
+	for _, portMap := range cfg.PortMappings {
+		portMapEntry := PortMappingEntry{
+			Protocol:      portMap.Protocol.String(),
+			ContainerPort: int(portMap.ContainerPort),
+			HostPort:      int(portMap.HostPort),
+		}
+		bridgeConf.PortMappings = append(bridgeConf.PortMappings, portMapEntry)
+	}
+
 	networkConfig, err := newNetworkConfig(bridgeConf, ECSVPCENIPluginExecutable, cfg.MinSupportedCNIVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create vpc-eni plugin configuration for setting up ecs-bridge endpoint of the task")
@@ -154,15 +163,6 @@ func NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cfg *Config) (*libcni.Net
 
 	networkConfig.Network.Name = "nat"
 	return networkConfig, nil
-
-	//for _, portMap := range cfg.PortMappings {
-	//	portMapEntry := PortMappingEntry{
-	//		Protocol:      portMap.Protocol.String(),
-	//		ContainerPort: int(portMap.ContainerPort),
-	//		HostPort:      int(portMap.HostPort),
-	//	}
-	//	vpcBridgeNetConf.PortMappings = append(vpcBridgeNetConf.PortMappings, portMapEntry)
-	//}
 
 	//seelog.Debugf("%+v", vpcBridgeNetConf)
 	//
