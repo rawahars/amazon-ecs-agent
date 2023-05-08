@@ -141,8 +141,13 @@ func NewVPCBridgePluginConfigForPortMappingTaskNSSetup(cfg *Config) (*libcni.Net
 	//	NetworkSubnet: "169.254.140.0/19",
 	//	BlockIMDS:     cfg.BlockInstanceMetadata,
 	//}
+	dns := types.DNS{
+		Nameservers: cfg.InstanceENIDNSServerList,
+	}
+
 	bridgeConf := VPCENIPluginConfig{
 		Type:               ECSVPCENIPluginName,
+		DNS:                dns,
 		UseExistingNetwork: true,
 		BlockIMDS:          cfg.BlockInstanceMetadata,
 	}
