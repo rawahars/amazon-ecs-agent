@@ -45,6 +45,7 @@ import (
 )
 
 const (
+	psCredentialCommandFormat = "$(New-Object System.Management.Automation.PSCredential('%s', $(ConvertTo-SecureString '%s' -AsPlainText -Force)))"
 	resourceProvisioningError = "VolumeError: Agent could not create task's volume resources"
 )
 
@@ -548,8 +549,10 @@ func (fv *FSxWindowsFileServerResource) performHostMount(remotePath string, user
 	}
 
 	// formatting to keep powershell happy
-	creds := fmt.Sprintf("-Credential $(New-Object System.Management.Automation.PSCredential(\"%s\", $(ConvertTo-SecureString \"%s\" -AsPlainText -Force)))", username, password)
-	remotePathArg := fmt.Sprintf("-RemotePath \"%s\"", remotePath)
+	credsCommand := fmt.Sprintf(psCredentialCommandFormat, username, password)
+
+	credsArg := fmt.Sprintf("-Credential %s", credsCommand)
+	remotePathArg := fmt.Sprintf("-RemotePath '%s'", remotePath)
 
 	// New-SmbGlobalMapping cmdlet creates an SMB mapping between the container instance
 	// and SMB share (FSx for Windows File Server file-system)
@@ -558,7 +561,7 @@ func (fv *FSxWindowsFileServerResource) performHostMount(remotePath string, user
 		"New-SmbGlobalMapping",
 		localPathArg,
 		remotePathArg,
-		creds,
+		credsArg,
 		"-Persistent $true",
 		"-RequirePrivacy $true",
 		"-ErrorAction Stop",
