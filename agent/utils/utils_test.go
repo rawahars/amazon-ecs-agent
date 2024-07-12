@@ -17,12 +17,14 @@
 package utils
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"sort"
 	"testing"
+	"time"
 
-	"github.com/aws/amazon-ecs-agent/agent/ecs_client/model/ecs"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/ecs/model/ecs"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/stretchr/testify/assert"
@@ -37,52 +39,6 @@ func TestDefaultIfBlank(t *testing.T) {
 
 	result = DefaultIfBlank("", defaultValue)
 	assert.Equal(t, defaultValue, result)
-}
-
-type dummyStruct struct {
-	// no contents
-}
-
-func (d dummyStruct) MarshalJSON([]byte, error) {
-	json.Marshal(nil)
-}
-
-func TestZeroOrNil(t *testing.T) {
-	type ZeroTest struct {
-		testInt     int
-		TestStr     string
-		testNilJson dummyStruct
-	}
-
-	var strMap map[string]string
-
-	testCases := []struct {
-		param    interface{}
-		expected bool
-		name     string
-	}{
-		{nil, true, "Nil is nil"},
-		{0, true, "0 is 0"},
-		{"", true, "\"\" is the string zerovalue"},
-		{ZeroTest{}, true, "ZeroTest zero-value should be zero"},
-		{ZeroTest{TestStr: "asdf"}, false, "ZeroTest with a field populated isn't zero"},
-		{ZeroTest{testNilJson: dummyStruct{}}, true, "nil is nil"},
-		{1, false, "1 is not 0"},
-		{[]uint16{1, 2, 3}, false, "[1,2,3] is not zero"},
-		{[]uint16{}, true, "[] is zero"},
-		{struct{ uncomparable []uint16 }{uncomparable: []uint16{1, 2, 3}}, false, "Uncomparable structs are never zero"},
-		{struct{ uncomparable []uint16 }{uncomparable: nil}, false, "Uncomparable structs are never zero"},
-		{strMap, true, "map[string]string is zero or nil"},
-		{make(map[string]string), true, "empty map[string]string is zero or nil"},
-		{map[string]string{"foo": "bar"}, false, "map[string]string{foo:bar} is not zero or nil"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.expected, ZeroOrNil(tc.param), tc.name)
-		})
-	}
-
 }
 
 func TestSlicesDeepEqual(t *testing.T) {
@@ -233,12 +189,26 @@ func TestGetTaskID(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGetENIAttachmentId(t *testing.T) {
+func TestGetAttachmentId(t *testing.T) {
 	attachmentArn := "arn:aws:ecs:us-west-2:1234567890:attachment/abc"
-	id, err := GetENIAttachmentId(attachmentArn)
+	id, err := GetAttachmentId(attachmentArn)
 	require.NoError(t, err)
 	assert.Equal(t, "abc", id)
 
-	_, err = GetENIAttachmentId("invalid")
+	_, err = GetAttachmentId("invalid")
 	assert.Error(t, err)
+}
+
+func TestFileExists(t *testing.T) {
+	t.Run("file is found", func(t *testing.T) {
+		file, err := os.CreateTemp("", "file_exists_test")
+		res, err := FileExists(file.Name())
+		assert.NoError(t, err)
+		assert.True(t, res)
+	})
+	t.Run("file is not found", func(t *testing.T) {
+		res, err := FileExists(fmt.Sprintf("test_file_exists_%d", time.Now().Unix()))
+		assert.NoError(t, err)
+		assert.False(t, res)
+	})
 }

@@ -26,7 +26,7 @@
 %global agent_image ecs-agent-v%{version}.tar
 
 Name:           ecs-init
-Version:        1.71.0
+Version:        1.85.0
 Release:        1%{?dist}
 License:        Apache 2.0
 Summary:        Amazon Elastic Container Service initialization application
@@ -39,7 +39,7 @@ Source3:        amazon-ecs-volume-plugin.service
 Source4:        amazon-ecs-volume-plugin.socket
 Source5:        amazon-ecs-volume-plugin.conf
 
-BuildRequires:  golang >= 1.18.0
+BuildRequires:  golang >= 1.22.0
 %if %{with systemd}
 BuildRequires:  systemd
 Requires:       systemd
@@ -191,6 +191,7 @@ install -m %{no_exec_perm} -D %{SOURCE5} %{buildroot}%{_sysconfdir}/init/amazon-
 %{_libexecdir}/amazon-ecs-init
 %{_mandir}/man1/amazon-ecs-init.1*
 %{_libexecdir}/amazon-ecs-volume-plugin
+%dir %{_sysconfdir}/ecs
 %config(noreplace) %ghost %{_sysconfdir}/ecs/ecs.config
 %config(noreplace) %ghost %{_sysconfdir}/ecs/ecs.config.json
 %ghost %{_cachedir}/ecs/ecs-agent.tar
@@ -269,6 +270,93 @@ fi
 %endif
 
 %changelog
+* Mon Jul 08 2024 Amogh Rathore <amoghr@amazon.com> - 1.85.0-1
+- Cache Agent version 1.85.0
+
+* Thu Jun 13 2024 Prateek Chaudhry <ptchau@amazon.com> - 1.84.0-1
+- Cache Agent version 1.84.0
+
+* Tue May 28 2024 Yiyuan Zhong <yiyzhong@amazon.com> - 1.83.0-1
+- Cache Agent version 1.83.0
+
+* Wed May 08 2024 Harish Senthilkumar <harishxr@amazon.com> - 1.82.4-1
+- Cache Agent version 1.82.4
+
+* Fri Apr 19 2024 Harish Senthilkumar <harishxr@amazon.com> - 1.82.3-1
+- Cache Agent version 1.82.3
+
+* Thu Apr 04 2024 Yiyuan Zhong <yiyzhong@amazon.com> - 1.82.2-1
+- Cache Agent version 1.82.2
+
+* Tue Mar 19 2024 Michael Ye <yemike@amazon.com> - 1.82.1-1
+- Cache Agent version 1.82.1
+
+* Wed Feb 28 2024 Amogh Rathore <amoghr@amazon.com> - 1.82.0-1
+- Cache Agent version 1.82.0
+
+* Tue Feb 20 2024 Yinyi Chen <yinyic@amazon.com> - 1.81.1-1
+- Cache Agent version 1.81.1
+
+* Wed Jan 31 2024 Chien-Han Lin <chilinn@amazon.com> - 1.81.0-1
+- Cache Agent version 1.81.0
+
+* Tue Jan 09 2024 Michael Ye <yemike@amazon.com> - 1.80.0-1
+- Cache Agent version 1.80.0
+
+* Mon Dec 04 2023 Dane Lim <slimdane@amazon.com> - 1.79.2-1
+- Cache Agent version 1.79.2
+
+* Mon Nov 13 2023 Chien-Han Lin <chilinn@amazon.com> - 1.79.1-1
+- Cache Agent version 1.79.1
+
+* Tue Oct 31 2023 Saisree Valluri <vsaisree@amazon.com> - 1.79.0-1
+- Cache Agent version 1.79.0
+
+* Thu Oct 26 2023 Anuj Singh <singholt@amazon.com> - 1.78.1-1
+- Cache Agent version 1.78.1
+
+* Wed Oct 11 2023 Cameron Sparr <cssparr@amazon.com> - 1.78.0-1
+- Cache Agent version 1.78.0
+
+* Wed Sep 27 2023 Prateek Chaudhry <ptchau@amazon.com> - 1.77.0-1
+- Cache Agent version 1.77.0
+
+* Tue Sep 12 2023 Yinyi Chen <yinyic@amazon.com> - 1.76.0-1
+- Cache Agent version 1.76.0
+
+* Wed Aug 30 2023 Utsa Bhattacharjya <utsa@amazon.com> - 1.75.3-1
+- Cache Agent version 1.75.3
+
+* Tue Aug 29 2023 Utsa Bhattacharjya <utsa@amazon.com> - 1.75.2-1
+- Cache Agent version 1.75.2
+
+* Thu Aug 24 2023 Ray Allan <fierlion@amazon.com> - 1.75.1-1
+- Cache Agent version 1.75.1
+
+* Wed Aug 09 2023 Chien-Han Lin <chilinn@amazon.com> - 1.75.0-1
+- Cache Agent version 1.75.0
+
+* Fri Jul 21 2023 Heming Han <hanhm@amazon.com> - 1.74.1-1
+- Cache Agent version 1.74.1
+
+* Thu Jul 20 2023 Heming Han <hanhm@amazon.com> - 1.74.0-1
+- Cache Agent version 1.74.0
+
+* Wed Jul 05 2023 Michael Ye <yemike@amazon.com> - 1.73.1-1
+- Cache Agent version 1.73.1
+
+* Thu Jun 22 2023 Prateek Chaudhry <ptchau@amazon.com> - 1.73.0-1
+- Cache Agent version 1.73.0
+
+* Tue Jun 06 2023 Yinyi Chen <yinyic@amazon.com> - 1.72.0-1
+- Cache Agent version 1.72.0
+
+* Tue May 23 2023 Utsa Bhattacharjya <utsa@amazon.com> - 1.71.2-1
+- Cache Agent version 1.71.2
+
+* Tue May 09 2023 Heming Han <hanhm@amazon.com> - 1.71.1-1
+- Cache Agent version 1.71.1
+
 * Tue Apr 25 2023 Yiyuan Zhong <yiyzhong@amazon.com> - 1.71.0-1
 - Cache Agent version 1.71.0
 

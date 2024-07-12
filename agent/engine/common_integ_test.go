@@ -25,24 +25,24 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
-	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/containermetadata"
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/data"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/sdkclientfactory"
-	"github.com/aws/amazon-ecs-agent/agent/ec2"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/engine/execcmd"
 	engineserviceconnect "github.com/aws/amazon-ecs-agent/agent/engine/serviceconnect"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	s3factory "github.com/aws/amazon-ecs-agent/agent/s3/factory"
 	ssmfactory "github.com/aws/amazon-ecs-agent/agent/ssm/factory"
 	"github.com/aws/amazon-ecs-agent/agent/statechange"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
+	apitaskstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/ec2"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
 	log "github.com/cihub/seelog"
 	"github.com/stretchr/testify/assert"
 )
@@ -111,10 +111,13 @@ func setupGMSALinux(cfg *config.Config, state dockerstate.TaskEngineState, t *te
 		},
 		DockerClient: dockerClient,
 	}
+	hostResources := getTestHostResources()
+	hostResourceManager := NewHostResourceManager(hostResources)
+	daemonManagers := getTestDaemonManagers()
 
 	taskEngine := NewDockerTaskEngine(cfg, dockerClient, credentialsManager,
-		eventstream.NewEventStream("ENGINEINTEGTEST", context.Background()), imageManager, state, metadataManager,
-		resourceFields, execcmd.NewManager(), engineserviceconnect.NewManager())
+		eventstream.NewEventStream("ENGINEINTEGTEST", context.Background()), imageManager, &hostResourceManager, state, metadataManager,
+		resourceFields, execcmd.NewManager(), engineserviceconnect.NewManager(), daemonManagers)
 	taskEngine.MustInit(context.TODO())
 	return taskEngine, func() {
 		taskEngine.Shutdown()
@@ -138,11 +141,32 @@ func loggerConfigIntegrationTest(logfile string) string {
 	return config
 }
 
+func verifyContainerManifestPulledStateChange(t *testing.T, taskEngine TaskEngine) {
+	stateChangeEvents := taskEngine.StateChangeEvents()
+	event := <-stateChangeEvents
+	assert.Equal(t, apicontainerstatus.ContainerManifestPulled, event.(api.ContainerStateChange).Status,
+		"Expected container to be at MANIFEST_PULLED state")
+}
+
+func verifyTaskManifestPulledStateChange(t *testing.T, taskEngine TaskEngine) {
+	stateChangeEvents := taskEngine.StateChangeEvents()
+	event := <-stateChangeEvents
+	assert.Equal(t, apitaskstatus.TaskManifestPulled, event.(api.TaskStateChange).Status,
+		"Expected task to reach MANIFEST_PULLED state")
+}
+
 func verifyContainerRunningStateChange(t *testing.T, taskEngine TaskEngine) {
 	stateChangeEvents := taskEngine.StateChangeEvents()
 	event := <-stateChangeEvents
 	assert.Equal(t, event.(api.ContainerStateChange).Status, apicontainerstatus.ContainerRunning,
 		"Expected container to be RUNNING")
+}
+
+func verifyTaskRunningStateChange(t *testing.T, taskEngine TaskEngine) {
+	stateChangeEvents := taskEngine.StateChangeEvents()
+	event := <-stateChangeEvents
+	assert.Equal(t, apitaskstatus.TaskRunning, event.(api.TaskStateChange).Status,
+		"Expected task to be RUNNING")
 }
 
 func verifyContainerRunningStateChangeWithRuntimeID(t *testing.T, taskEngine TaskEngine) {
@@ -175,6 +199,14 @@ func verifyContainerStoppedStateChange(t *testing.T, taskEngine TaskEngine) {
 		"Expected container to be STOPPED")
 }
 
+func verifyContainerStoppedStateChangeWithReason(t *testing.T, taskEngine TaskEngine, reason string) {
+	stateChangeEvents := taskEngine.StateChangeEvents()
+	event := <-stateChangeEvents
+	assert.Equal(t, event.(api.ContainerStateChange).Status, apicontainerstatus.ContainerStopped,
+		"Expected container to be STOPPED")
+	assert.Equal(t, reason, event.(api.ContainerStateChange).Reason)
+}
+
 func verifyContainerStoppedStateChangeWithRuntimeID(t *testing.T, taskEngine TaskEngine) {
 	stateChangeEvents := taskEngine.StateChangeEvents()
 	event := <-stateChangeEvents
@@ -182,6 +214,16 @@ func verifyContainerStoppedStateChangeWithRuntimeID(t *testing.T, taskEngine Tas
 		"Expected container to be STOPPED")
 	assert.NotEqual(t, "", event.(api.ContainerStateChange).RuntimeID,
 		"Expected container runtimeID should not empty")
+}
+
+// verifySpecificContainerStateChange verifies that a specific container (identified by the containerName parameter),
+// has a specific status (identified by the containerStatus parameter)
+func verifySpecificContainerStateChange(t *testing.T, taskEngine TaskEngine, containerName string,
+	containerStatus apicontainerstatus.ContainerStatus) {
+	stateChangeEvents := taskEngine.StateChangeEvents()
+	event := <-stateChangeEvents
+	assert.Equal(t, event.(api.ContainerStateChange).ContainerName, containerName)
+	assert.Equal(t, event.(api.ContainerStateChange).Status, containerStatus)
 }
 
 func setup(cfg *config.Config, state dockerstate.TaskEngineState, t *testing.T) (TaskEngine, func(), credentials.Manager) {
@@ -202,10 +244,13 @@ func setup(cfg *config.Config, state dockerstate.TaskEngineState, t *testing.T) 
 	imageManager := NewImageManager(cfg, dockerClient, state)
 	imageManager.SetDataClient(data.NewNoopClient())
 	metadataManager := containermetadata.NewManager(dockerClient, cfg)
+	hostResources := getTestHostResources()
+	hostResourceManager := NewHostResourceManager(hostResources)
+	daemonManagers := getTestDaemonManagers()
 
 	taskEngine := NewDockerTaskEngine(cfg, dockerClient, credentialsManager,
-		eventstream.NewEventStream("ENGINEINTEGTEST", context.Background()), imageManager, state, metadataManager,
-		nil, execcmd.NewManager(), engineserviceconnect.NewManager())
+		eventstream.NewEventStream("ENGINEINTEGTEST", context.Background()), imageManager, &hostResourceManager, state, metadataManager,
+		nil, execcmd.NewManager(), engineserviceconnect.NewManager(), daemonManagers)
 	taskEngine.MustInit(context.TODO())
 	return taskEngine, func() {
 		taskEngine.Shutdown()
@@ -221,6 +266,8 @@ func skipIntegTestIfApplicable(t *testing.T) {
 	}
 }
 
+// Values in host resources from getTestHostResources() should be looked at and CPU/Memory assigned
+// accordingly
 func createTestContainerWithImageAndName(image string, name string) *apicontainer.Container {
 	return &apicontainer.Container{
 		Name:                name,
@@ -228,7 +275,7 @@ func createTestContainerWithImageAndName(image string, name string) *apicontaine
 		Command:             []string{},
 		Essential:           true,
 		DesiredStatusUnsafe: apicontainerstatus.ContainerRunning,
-		CPU:                 1024,
+		CPU:                 256,
 		Memory:              128,
 	}
 }

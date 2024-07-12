@@ -17,13 +17,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/data"
 	"github.com/aws/amazon-ecs-agent/agent/engine"
+	dm "github.com/aws/amazon-ecs-agent/agent/engine/daemonmanager"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/engine/execcmd"
 	"github.com/aws/amazon-ecs-agent/agent/engine/serviceconnect"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/ecs/model/ecs"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
 
 	"github.com/pkg/errors"
 )
@@ -65,12 +67,16 @@ func (agent *ecsAgent) loadData(containerChangeEventStream *eventstream.EventStr
 	credentialsManager credentials.Manager,
 	state dockerstate.TaskEngineState,
 	imageManager engine.ImageManager,
+	hostResources map[string]*ecs.Resource,
 	execCmdMgr execcmd.Manager,
-	serviceConnectManager serviceconnect.Manager) (*savedData, error) {
+	serviceConnectManager serviceconnect.Manager,
+	daemonManagers map[string]dm.DaemonManager) (*savedData, error) {
+
 	s := &savedData{
 		taskEngine: engine.NewTaskEngine(agent.cfg, agent.dockerClient, credentialsManager,
-			containerChangeEventStream, imageManager, state,
-			agent.metadataManager, agent.resourceFields, execCmdMgr, serviceConnectManager),
+			containerChangeEventStream, imageManager, hostResources, state,
+			agent.metadataManager, agent.resourceFields, execCmdMgr,
+			serviceConnectManager, daemonManagers),
 	}
 	s.taskEngine.SetDataClient(agent.dataClient)
 

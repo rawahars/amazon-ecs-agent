@@ -22,9 +22,11 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
-	"github.com/aws/amazon-ecs-agent/agent/ecs_client/model/ecs"
-	"github.com/aws/amazon-ecs-agent/agent/logger"
-	"github.com/aws/amazon-ecs-agent/agent/logger/field"
+	dm "github.com/aws/amazon-ecs-agent/agent/engine/daemonmanager"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/ecs/model/ecs"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/logger"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/logger/field"
+	md "github.com/aws/amazon-ecs-agent/ecs-agent/manageddaemon"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cihub/seelog"
 	"github.com/pkg/errors"
@@ -66,6 +68,7 @@ const (
 	capabilityFirelensConfigS3                             = "firelens.options.config.s3"
 	capabilityFullTaskSync                                 = "full-sync"
 	capabilityGMSA                                         = "gmsa"
+	capabilityGMSADomainless                               = "gmsa-domainless"
 	capabilityEFS                                          = "efs"
 	capabilityEFSAuth                                      = "efsAuth"
 	capabilityEnvFilesS3                                   = "env-files.s3"
@@ -76,6 +79,8 @@ const (
 	capabilityExecCertsRelativePath                        = "certs"
 	capabilityExternal                                     = "external"
 	capabilityServiceConnect                               = "service-connect-v1"
+	capabilityGpuDriverVersion                             = "gpu-driver-version"
+	capabilityEBSTaskAttach                                = "storage.ebs-task-volume-attach"
 
 	// network capabilities, going forward, please append "network." prefix to any new networking capability we introduce
 	networkCapabilityPrefix      = "network."
@@ -124,6 +129,7 @@ var (
 		attributePrefix + taskEIAAttributeSuffix,
 		attributePrefix + taskEIAWithOptimizedCPU,
 		attributePrefix + capabilityServiceConnect,
+		attributePrefix + capabilityEBSTaskAttach,
 	}
 	// List of capabilities that are only supported on external capaciity. Currently only one but keep as a list
 	// for future proof and also align with externalUnsupportedCapabilities.
@@ -200,14 +206,14 @@ func (agent *ecsAgent) capabilities() ([]*ecs.Attribute, error) {
 	}
 
 	supportedVersions := make(map[dockerclient.DockerVersion]bool)
-	// Determine API versions to report as supported. Supported versions are also used for capability-enablement, except
-	// logging drivers.
-	for _, version := range agent.dockerClient.SupportedVersions() {
+	// Determine API versions to report as supported via com.amazonaws.ecs.capability.docker-remote-api.X.XX capabilities
+	// and for determining which features we support that depend on specific docker API versions
+	for _, version := range dockerclient.SupportedVersionsExtended(agent.dockerClient.SupportedVersions) {
 		capabilities = appendNameOnlyAttribute(capabilities, capabilityPrefix+"docker-remote-api."+string(version))
 		supportedVersions[version] = true
 	}
 
-	capabilities = agent.appendLoggingDriverCapabilities(capabilities)
+	capabilities = agent.appendLoggingDriverCapabilities(capabilities, supportedVersions)
 
 	if agent.cfg.SELinuxCapable.Enabled() {
 		capabilities = appendNameOnlyAttribute(capabilities, capabilityPrefix+"selinux")
@@ -271,6 +277,9 @@ func (agent *ecsAgent) capabilities() ([]*ecs.Attribute, error) {
 	// support GMSA capabilities
 	capabilities = agent.appendGMSACapabilities(capabilities)
 
+	// support GMSA domainless capabilities
+	capabilities = agent.appendGMSADomainlessCapabilities(capabilities)
+
 	// support efs auth on ecs capabilities
 	for _, cap := range agent.cfg.VolumePluginCapabilities {
 		capabilities = agent.appendEFSVolumePluginCapabilities(capabilities, cap)
@@ -285,6 +294,11 @@ func (agent *ecsAgent) capabilities() ([]*ecs.Attribute, error) {
 	}
 	// add service-connect capabilities if applicable
 	capabilities = agent.appendServiceConnectCapabilities(capabilities)
+
+	if agent.cfg.EBSTASupportEnabled {
+		// add ebs-task-attach attribute if applicable
+		capabilities = agent.appendEBSTaskAttachCapabilities(capabilities)
+	}
 
 	if agent.cfg.External.Enabled() {
 		// Add external specific capability; remove external unsupported capabilities.
@@ -303,7 +317,6 @@ func (agent *ecsAgent) appendDockerDependentCapabilities(capabilities []*ecs.Att
 		capabilities = appendNameOnlyAttribute(capabilities, capabilityPrefix+"ecr-auth")
 		capabilities = appendNameOnlyAttribute(capabilities, attributePrefix+"execution-role-ecr-pull")
 	}
-
 	if _, ok := supportedVersions[dockerclient.Version_1_24]; ok && !agent.cfg.DisableDockerHealthCheck.Enabled() {
 		// Docker health check was added in API 1.24
 		capabilities = appendNameOnlyAttribute(capabilities, attributePrefix+"container-health-check")
@@ -319,17 +332,18 @@ func (agent *ecsAgent) appendGMSACapabilities(capabilities []*ecs.Attribute) []*
 	return capabilities
 }
 
-func (agent *ecsAgent) appendLoggingDriverCapabilities(capabilities []*ecs.Attribute) []*ecs.Attribute {
-	knownVersions := make(map[dockerclient.DockerVersion]struct{})
-	// Determine known API versions. Known versions are used exclusively for logging-driver enablement, since none of
-	// the structural API elements change.
-	for _, version := range agent.dockerClient.KnownVersions() {
-		knownVersions[version] = struct{}{}
+func (agent *ecsAgent) appendGMSADomainlessCapabilities(capabilities []*ecs.Attribute) []*ecs.Attribute {
+	if agent.cfg.GMSADomainlessCapable.Enabled() {
+		return appendNameOnlyAttribute(capabilities, attributePrefix+capabilityGMSADomainless)
 	}
 
+	return capabilities
+}
+
+func (agent *ecsAgent) appendLoggingDriverCapabilities(capabilities []*ecs.Attribute, supportedVersions map[dockerclient.DockerVersion]bool) []*ecs.Attribute {
 	for _, loggingDriver := range agent.cfg.AvailableLoggingDrivers {
 		requiredVersion := dockerclient.LoggingDriverMinimumVersion[loggingDriver]
-		if _, ok := knownVersions[requiredVersion]; ok {
+		if _, ok := supportedVersions[requiredVersion]; ok {
 			capabilities = appendNameOnlyAttribute(capabilities, capabilityPrefix+"logging-driver."+string(loggingDriver))
 		}
 	}
@@ -483,6 +497,40 @@ func (agent *ecsAgent) appendServiceConnectCapabilities(capabilities []*ecs.Attr
 	for _, serviceConnectCapability := range supportedAppnetInterfaceVerToCapabilities {
 		capabilities = appendNameOnlyAttribute(capabilities, serviceConnectCapability)
 	}
+	return capabilities
+}
+
+func (agent *ecsAgent) appendEBSTaskAttachCapabilities(capabilities []*ecs.Attribute) []*ecs.Attribute {
+	// todo update to import multiple daemons and append capabilities
+	// for now load only EBS CSI Driver daemon
+	daemonDefinitions, err := md.ImportAll()
+	if err != nil {
+		logger.Error(fmt.Sprintf("Daemon import failure: %s", err))
+		return capabilities
+	}
+	if len(daemonDefinitions) == 0 {
+		logger.Warn("daemonDefinitions is empty/nil after import")
+		return capabilities
+	}
+	for _, daemonDef := range daemonDefinitions {
+		if daemonDef.GetImageName() == md.EbsCsiDriver {
+			csiDaemonManager := dm.NewDaemonManager(daemonDef)
+			agent.setDaemonManager(md.EbsCsiDriver, csiDaemonManager)
+			imageExists, err := csiDaemonManager.ImageExists()
+			if !imageExists {
+				logger.Error(
+					"Either EBS Daemon image does not exist or failed to check its existence."+
+						" This container instance will not advertise EBS Task Attach capability.",
+					logger.Fields{
+						field.ImageName:    csiDaemonManager.GetManagedDaemon().GetImageName(),
+						field.ImageTARPath: csiDaemonManager.GetManagedDaemon().GetImageTarPath(),
+						field.Error:        err,
+					})
+				return capabilities
+			}
+		}
+	}
+	capabilities = appendNameOnlyAttribute(capabilities, attributePrefix+capabilityEBSTaskAttach)
 	return capabilities
 }
 

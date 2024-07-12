@@ -22,8 +22,8 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	"github.com/aws/amazon-ecs-agent/agent/api/container/status"
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/stretchr/testify/assert"
 )
@@ -75,6 +75,9 @@ func TestDependencyHealthCheck(t *testing.T) {
 	finished := make(chan interface{})
 	go func() {
 		// Both containers should start
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyTaskIsRunning(stateChangeEvents, testTask)
@@ -131,6 +134,11 @@ func TestDependencyComplete(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// Both containers and the task should reach MANIFEST_PULLED regardless of ordering
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// First container should run to completion and then exit
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerStoppedStateChange(t, taskEngine)
@@ -141,6 +149,66 @@ func TestDependencyComplete(t *testing.T) {
 
 		// Last container stops and then the task stops
 		verifyContainerStoppedStateChange(t, taskEngine)
+		verifyTaskIsStopped(stateChangeEvents, testTask)
+		close(finished)
+	}()
+
+	waitFinished(t, finished, orderingTimeout)
+}
+
+// TestDependencyStart tests a task workflow with a START container ordering dependency between 2 containers.
+// Container 'parent' depends on  container 'dependency' to START. We ensure that the 'parent' container starts only
+// after the 'dependency' container has started.
+func TestDependencyStart(t *testing.T) {
+	taskEngine, done, _ := setupWithDefaultConfig(t)
+	defer done()
+
+	stateChangeEvents := taskEngine.StateChangeEvents()
+
+	taskArn := "testDependencyStart"
+	testTask := createTestTask(taskArn)
+
+	parent := createTestContainerWithImageAndName(baseImageForOS, "parent")
+	dependency := createTestContainerWithImageAndName(baseImageForOS, "dependency")
+
+	parent.EntryPoint = &entryPointForOS
+	parent.Command = []string{"sleep 5 && exit 0"}
+	parent.Essential = true
+	parent.DependsOnUnsafe = []apicontainer.DependsOn{
+		{
+			ContainerName: "dependency",
+			Condition:     "START",
+		},
+	}
+
+	dependency.EntryPoint = &entryPointForOS
+	dependency.Command = []string{"sleep 90"}
+	dependency.Essential = false
+
+	testTask.Containers = []*apicontainer.Container{
+		parent,
+		dependency,
+	}
+
+	go taskEngine.AddTask(testTask)
+
+	finished := make(chan interface{})
+	go func() {
+		// Both containers and the task should go to MANIFEST_PULLED state
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
+		// 'dependency' container should run first, followed by the 'parent' container
+		verifySpecificContainerStateChange(t, taskEngine, "dependency", status.ContainerRunning)
+		verifySpecificContainerStateChange(t, taskEngine, "parent", status.ContainerRunning)
+
+		// task becomes running after 'parent' is running
+		err := verifyTaskIsRunning(stateChangeEvents, testTask)
+		assert.NoError(t, err)
+
+		// 'parent' container stops and then the task stops
+		verifySpecificContainerStateChange(t, taskEngine, "parent", status.ContainerStopped)
 		verifyTaskIsStopped(stateChangeEvents, testTask)
 		close(finished)
 	}()
@@ -190,6 +258,11 @@ func TestDependencySuccess(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// All containers and the task should reach MANIFEST_PULLED
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// First container should run to completion
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerStoppedStateChange(t, taskEngine)
@@ -249,6 +322,11 @@ func TestDependencySuccessErrored(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// Both containers and the task should reach MANIFEST_PULLED state
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// First container should run to completion
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerStoppedStateChange(t, taskEngine)
@@ -305,6 +383,12 @@ func TestDependencySuccessTimeout(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// All containers and the task should reach MANIFEST_PULLED
+		for _ = range testTask.Containers {
+			verifyContainerManifestPulledStateChange(t, taskEngine)
+		}
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// First container should run to completion
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerStoppedStateChange(t, taskEngine)
@@ -368,6 +452,11 @@ func TestDependencyHealthyTimeout(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// Both containers and the task should reach MANIFEST_PULLED
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// First container should run to completion
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerStoppedStateChange(t, taskEngine)
@@ -445,6 +534,11 @@ func TestShutdownOrder(t *testing.T) {
 	finished := make(chan interface{})
 	go func() {
 		// Everything should first progress to running
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyContainerManifestPulledStateChange(t, taskEngine)
+		verifyTaskManifestPulledStateChange(t, taskEngine)
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerRunningStateChange(t, taskEngine)
 		verifyContainerRunningStateChange(t, taskEngine)
@@ -534,6 +628,12 @@ func TestMultipleContainerDependency(t *testing.T) {
 
 	finished := make(chan interface{})
 	go func() {
+		// All containers and the task should reach MANIFEST_PULLED regardless of dependency
+		for _ = range testTask.Containers {
+			verifyContainerManifestPulledStateChange(t, taskEngine)
+		}
+		verifyTaskManifestPulledStateChange(t, taskEngine)
+
 		// Only exit should first progress to running
 		verifyContainerRunningStateChange(t, taskEngine)
 

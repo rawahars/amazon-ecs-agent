@@ -145,20 +145,23 @@ ifneq (${BUILD_PLATFORM},aarch64)
 	GOTEST += -race
 endif
 
-test:
-	cd agent && GO111MODULE=on ${GOTEST} ${VERBOSE} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
+test-ebs-csi:
+	make -C ./ecs-agent/daemonimages/csidriver test
+
+test: test-ebs-csi
+	cd agent && GO111MODULE=on GOEXPERIMENT=nocoverageredesign ${GOTEST} ${VERBOSE} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
 	go tool cover -func cover.out > coverprofile.out
-	cd ecs-agent && GO111MODULE=on ${GOTEST} ${VERBOSE} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
+	cd ecs-agent && GO111MODULE=on GOEXPERIMENT=nocoverageredesign ${GOTEST} ${VERBOSE} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
 	go tool cover -func cover.out > coverprofile-ecs-agent.out
 
 test-init:
-	go test -count=1 -short -v -coverprofile cover.out ./ecs-init/...
+	GOEXPERIMENT=nocoverageredesign go test -count=1 -short -v -coverprofile cover.out ./ecs-init/...
 	go tool cover -func cover.out > coverprofile-init.out
 
-test-silent:
-	cd agent && GO111MODULE=on ${GOTEST} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
+test-silent: test-ebs-csi
+	cd agent && GO111MODULE=on GOEXPERIMENT=nocoverageredesign ${GOTEST} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
 	go tool cover -func cover.out > coverprofile.out
-	cd ecs-agent && GO111MODULE=on ${GOTEST} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
+	cd ecs-agent && GO111MODULE=on GOEXPERIMENT=nocoverageredesign ${GOTEST} -tags unit -mod vendor -coverprofile ../cover.out -timeout=120s ./... && cd ..
 	go tool cover -func cover.out > coverprofile-ecs-agent.out
 
 .PHONY: analyze-cover-profile
@@ -170,8 +173,9 @@ analyze-cover-profile: coverprofile.out coverprofile-ecs-agent.out
 analyze-cover-profile-init: coverprofile-init.out
 	./scripts/analyze-cover-profile coverprofile-init.out
 
-run-integ-tests: test-registry gremlin container-health-check-image run-sudo-tests
+run-integ-tests: test-registry gremlin start-ebs-csi-driver container-health-check-image run-sudo-tests
 	ECS_LOGLEVEL=debug ${GOTEST} -tags integration -timeout=30m ./agent/... ./ecs-agent/...
+	$(MAKE) stop-ebs-csi-driver
 
 run-sudo-tests:
 	sudo -E ${GOTEST} -tags sudo -timeout=10m ./agent/...
@@ -286,13 +290,27 @@ exec-command-agent-test:
 
 	@./scripts/setup-test-registry
 
-.PHONY: fluentd gremlin image-cleanup-test-images
+.PHONY: fluentd gremlin ebs-csi-driver start-ebs-csi-driver stop-ebs-csi-driver image-cleanup-test-images
 
 gremlin:
 	$(MAKE) -C misc/gremlin $(MFLAGS)
 
 fluentd:
 	$(MAKE) -C misc/fluentd $(MFLAGS)
+
+EBS_CSI_DRIVER_DIR=./ecs-agent/daemonimages/csidriver
+
+ebs-csi-driver:
+	$(MAKE) -C $(EBS_CSI_DRIVER_DIR) $(MFLAGS) bin/ebs-csi-driver
+
+# Starts EBS CSI Driver as a background process.
+# The driver uses /tmp/ebs-csi-driver.sock as the socket file.
+start-ebs-csi-driver: ebs-csi-driver
+	$(EBS_CSI_DRIVER_DIR)/bin/ebs-csi-driver --endpoint unix:///tmp/ebs-csi-driver.sock &
+
+# Stops EBS CSI Driver process started by start-ebs-csi-driver target.
+stop-ebs-csi-driver:
+	ps aux | grep $(EBS_CSI_DRIVER_DIR)/bin/ebs-csi-driver | grep -v grep | awk '{print $$2}' | xargs -L1 kill
 
 image-cleanup-test-images:
 	$(MAKE) -C misc/image-cleanup-test-images $(MFLAGS)
@@ -307,14 +325,14 @@ GOFILES:=$(shell go list -f '{{$$p := .}}{{range $$f := .GoFiles}}{{$$p.Dir}}/{{
 .PHONY: gocyclo
 gocyclo:
 	# Run gocyclo over all .go files
-	gocyclo -over 17 ${GOFILES}
+	gocyclo -over 40 ${GOFILES}
 
 # same as gofiles above, but without the `-f`
 .PHONY: govet
 govet:
 	go vet $(shell go list ./agent/... ./ecs-agent/... | grep -v /testutils/ | grep -v _test\.go$ | grep -v /mocks | grep -v /model)
 
-GOFMTFILES:=$(shell find ./agent ./ecs-agent -not -path './agent/vendor/*' -not -path './ecs-agent/vendor/*' -type f -iregex '.*\.go')
+GOFMTFILES:=$(shell find ./agent ./ecs-agent -not -path './agent/vendor/*' -not -path './ecs-agent/vendor/*' -not -path './ecs-agent/daemonimages/csidriver/vendor/*' -type f -iregex '.*\.go')
 
 .PHONY: importcheck
 importcheck:
@@ -357,7 +375,7 @@ install-golang:
 	go install github.com/golang/mock/mockgen@v1.6.0
 	go install golang.org/x/tools/cmd/goimports@v0.2.0
 	GO111MODULE=on go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
-	GO111MODULE=on go install honnef.co/go/tools/cmd/staticcheck@v0.3.2
+	GO111MODULE=on go install honnef.co/go/tools/cmd/staticcheck@2023.1.6
 	touch .get-deps-stamp
 
 get-deps: .get-deps-stamp
@@ -366,7 +384,7 @@ get-deps-init:
 	go install github.com/golang/mock/mockgen@v1.6.0
 	go install golang.org/x/tools/cmd/goimports@v0.2.0
 	GO111MODULE=on go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
-	GO111MODULE=on go install honnef.co/go/tools/cmd/staticcheck@v0.3.2
+	GO111MODULE=on go install honnef.co/go/tools/cmd/staticcheck@v0.4.0
 
 amazon-linux-sources.tgz:
 	./scripts/update-version.sh
@@ -385,6 +403,23 @@ amazon-linux-sources.tgz:
 	touch .amazon-linux-rpm-integrated-done
 
 amazon-linux-rpm-integrated: .amazon-linux-rpm-integrated-done
+
+# Make target for Amazon Linux Codebuild jobs
+.amazon-linux-rpm-codebuild-done: get-cni-sources
+	./scripts/update-version.sh
+	cp packaging/amazon-linux-ami-integrated/ecs-agent.spec ecs-agent.spec
+	cp packaging/amazon-linux-ami-integrated/ecs.conf ecs.conf
+	cp packaging/amazon-linux-ami-integrated/ecs.service ecs.service
+	cp packaging/amazon-linux-ami-integrated/amazon-ecs-volume-plugin.conf amazon-ecs-volume-plugin.conf
+	cp packaging/amazon-linux-ami-integrated/amazon-ecs-volume-plugin.service amazon-ecs-volume-plugin.service
+	cp packaging/amazon-linux-ami-integrated/amazon-ecs-volume-plugin.socket amazon-ecs-volume-plugin.socket
+	tar -czf ./sources.tgz ecs-init scripts misc agent amazon-ecs-cni-plugins amazon-vpc-cni-plugins agent-container Makefile VERSION GO_VERSION
+	test -e SOURCES || ln -s . SOURCES
+	rpmbuild --define "%_topdir $(PWD)" -bb ecs-agent.spec
+	find RPMS/ -type f -exec cp {} . \;
+	touch .amazon-linux-rpm-codebuild-done
+
+amazon-linux-rpm-codebuild: .amazon-linux-rpm-codebuild-done
 
 .generic-rpm-integrated-done: get-cni-sources
 	./scripts/update-version.sh
@@ -465,6 +500,8 @@ clean:
 	-rm -f .amazon-linux-rpm-integrated-done
 	-rm -f .generic-rpm-integrated-done
 	-rm -f amazon-ecs-volume-plugin
+	-rm -rf $(EBS_CSI_DRIVER_DIR)/bin
+	-rm -rf /tmp/private-test-registry-htpasswd # private registry credentials cleanup
 
 clean-all: clean
 	# for our dockerfree builds, we likely don't have docker

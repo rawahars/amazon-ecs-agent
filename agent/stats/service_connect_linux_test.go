@@ -24,14 +24,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aws/amazon-ecs-agent/agent/api/appnet"
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/appnet"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apieni "github.com/aws/amazon-ecs-agent/agent/api/eni"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
-	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
-	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
+	apitaskstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	ni "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/networkinterface"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/tcs/model/ecstcs"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +41,7 @@ func TestRetrieveServiceConnectMetrics(t *testing.T) {
 	t1 := &apitask.Task{
 		Arn:               "t1",
 		Family:            "f1",
-		ENIs:              []*apieni.ENI{{ID: "ec2Id"}},
+		ENIs:              []*ni.NetworkInterface{{ID: "ec2Id"}},
 		KnownStatusUnsafe: apitaskstatus.TaskRunning,
 		Containers: []*apicontainer.Container{
 			{Name: "test"},
@@ -148,7 +148,7 @@ func TestRetrieveServiceConnectMetrics(t *testing.T) {
 			ts.Start()
 
 			serviceConnectStats := &ServiceConnectStats{
-				appnetClient: appnet.Client(),
+				appnetClient: appnet.CreateClient(),
 			}
 			serviceConnectStats.retrieveServiceConnectStats(t1)
 

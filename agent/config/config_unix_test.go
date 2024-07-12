@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
-	"github.com/aws/amazon-ecs-agent/agent/ec2"
-	cnitypes "github.com/containernetworking/cni/pkg/types"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/ec2"
 )
 
 func TestConfigDefault(t *testing.T) {
@@ -45,6 +46,7 @@ func TestConfigDefault(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.DockerStopTimeout, "Default docker stop container timeout set incorrectly")
 	assert.Equal(t, 3*time.Minute, cfg.ContainerStartTimeout, "Default docker start container timeout set incorrectly")
 	assert.Equal(t, 4*time.Minute, cfg.ContainerCreateTimeout, "Default docker create container timeout set incorrectly")
+	assert.Equal(t, 1*time.Minute, cfg.ManifestPullTimeout, "Default manifest pull timeout set incorrectly")
 	assert.False(t, cfg.PrivilegedDisabled.Enabled(), "Default PrivilegedDisabled set incorrectly")
 	assert.Equal(t, []dockerclient.LoggingDriver{dockerclient.JSONFileDriver, dockerclient.NoneDriver},
 		cfg.AvailableLoggingDrivers, "Default logging drivers set incorrectly")
@@ -74,6 +76,7 @@ func TestConfigDefault(t *testing.T) {
 	assert.False(t, cfg.PollMetrics.Enabled(), "ECS_POLL_METRICS default should be false")
 	assert.False(t, cfg.EnableRuntimeStats.Enabled(), "Default EnableRuntimeStats set incorrectly")
 	assert.True(t, cfg.ShouldExcludeIPv6PortBinding.Enabled(), "Default ShouldExcludeIPv6PortBinding set incorrectly")
+	assert.False(t, cfg.FSxWindowsFileServerCapable.Enabled(), "Default FSxWindowsFileServerCapable set incorrectly")
 }
 
 // TestConfigFromFile tests the configuration can be read from file
@@ -124,7 +127,7 @@ func TestConfigFromFile(t *testing.T) {
 	assert.Equal(t, testPauseImageName, cfg.PauseContainerImageName, "should read PauseContainerImageName")
 	assert.Equal(t, testPauseTag, cfg.PauseContainerTag, "should read PauseContainerTag")
 	assert.Equal(t, 1, len(cfg.AWSVPCAdditionalLocalRoutes), "should have one additional local route")
-	expectedLocalRoute, err := cnitypes.ParseCIDR("169.254.172.1/32")
+	expectedLocalRoute, err := cniTypes.ParseCIDR("169.254.172.1/32")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedLocalRoute.IP, cfg.AWSVPCAdditionalLocalRoutes[0].IP, "should match expected route IP")
 	assert.Equal(t, expectedLocalRoute.Mask, cfg.AWSVPCAdditionalLocalRoutes[0].Mask, "should match expected route Mask")

@@ -26,7 +26,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 
 	"github.com/cihub/seelog"
-	cnitypes "github.com/containernetworking/cni/pkg/types"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -35,6 +35,15 @@ const (
 	// domain join check validation. This is useful for integration and
 	// functional-tests but should not be set for any non-test use-case.
 	envSkipDomainJoinCheck = "ZZZ_SKIP_DOMAIN_JOIN_CHECK_NOT_SUPPORTED_IN_PRODUCTION"
+	// envSkipDomainLessCheck is an environment setting that can be used to skip
+	// domain less gMSA support check validation. This is useful for integration and
+	// functional-tests but should not be set for any non-test use-case.
+	envSkipDomainLessCheck = "ZZZ_SKIP_DOMAIN_LESS_CHECK_NOT_SUPPORTED_IN_PRODUCTION"
+	// envGmsaEcsSupport is an environment setting that can be used to enable gMSA support on ECS
+	envGmsaEcsSupport = "ECS_GMSA_SUPPORTED"
+	// envCredentialsFetcherHostDir is an environment setting that is set in ecs-init identifying
+	// location of the credentials-fetcher location on the machine
+	envCredentialsFetcherHostDir = "CREDENTIALS_FETCHER_HOST_DIR"
 )
 
 func parseCheckpoint(dataDir string) BooleanDefaultFalse {
@@ -83,6 +92,19 @@ func parseDockerStopTimeout() time.Duration {
 		seelog.Warnf("Discarded invalid value for docker stop timeout, parsed as: %v", parsedStopTimeout)
 	}
 	return dockerStopTimeout
+}
+
+func parseManifestPullTimeout() time.Duration {
+	var timeout time.Duration
+	parsedTimeout := parseEnvVariableDuration("ECS_MANIFEST_PULL_TIMEOUT")
+	if parsedTimeout >= minimumManifestPullTimeout {
+		timeout = parsedTimeout
+	} else if parsedTimeout != 0 {
+		// Parsed timeout too low
+		timeout = minimumManifestPullTimeout
+		seelog.Warnf("Discarded invalid value for manifest pull timeout, parsed as: %v", parsedTimeout)
+	}
+	return timeout
 }
 
 func parseContainerStartTimeout() time.Duration {
@@ -207,8 +229,8 @@ func parseInstanceAttributes(errs []error) (map[string]string, []error) {
 	return instanceAttributes, errs
 }
 
-func parseAdditionalLocalRoutes(errs []error) ([]cnitypes.IPNet, []error) {
-	var additionalLocalRoutes []cnitypes.IPNet
+func parseAdditionalLocalRoutes(errs []error) ([]cniTypes.IPNet, []error) {
+	var additionalLocalRoutes []cniTypes.IPNet
 	additionalLocalRoutesEnv := os.Getenv("ECS_AWSVPC_ADDITIONAL_LOCAL_ROUTES")
 	if additionalLocalRoutesEnv != "" {
 		err := json.Unmarshal([]byte(additionalLocalRoutesEnv), &additionalLocalRoutes)

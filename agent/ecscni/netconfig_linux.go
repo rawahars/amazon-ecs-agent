@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"net"
 
+	ni "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/networkinterface"
+
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
 
-	"github.com/aws/amazon-ecs-agent/agent/api/appmesh"
-	"github.com/aws/amazon-ecs-agent/agent/api/eni"
-
+	"github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/appmesh"
 	"github.com/cihub/seelog"
 	"github.com/containernetworking/cni/libcni"
-	cnitypes "github.com/containernetworking/cni/pkg/types"
+	cniTypes "github.com/containernetworking/cni/pkg/types"
 )
 
 // NewBridgeNetworkConfig creates the config of bridge for ADD command, where
@@ -89,7 +89,7 @@ func newIPAMConfig(cfg *Config) (IPAMConfig, error) {
 		return IPAMConfig{}, err
 	}
 
-	routes := []*cnitypes.Route{
+	routes := []*cniTypes.Route{
 		{
 			Dst: *dst,
 		},
@@ -98,7 +98,7 @@ func newIPAMConfig(cfg *Config) (IPAMConfig, error) {
 	for _, route := range cfg.AdditionalLocalRoutes {
 		seelog.Debugf("[ECSCNI] Adding an additional route for %s", route)
 		ipNetRoute := (net.IPNet)(route)
-		routes = append(routes, &cnitypes.Route{Dst: ipNetRoute})
+		routes = append(routes, &cniTypes.Route{Dst: ipNetRoute})
 	}
 
 	ipamConfig := IPAMConfig{
@@ -112,18 +112,17 @@ func newIPAMConfig(cfg *Config) (IPAMConfig, error) {
 	return ipamConfig, nil
 }
 
-// NewENINetworkConfig creates a new ENI CNI network configuration.
-func NewENINetworkConfig(eni *eni.ENI, cfg *Config) (string, *libcni.NetworkConfig, error) {
-	eniConf := ENIConfig{
-		Type:                  ECSENIPluginName,
-		ENIID:                 eni.ID,
-		MACAddress:            eni.MacAddress,
-		IPAddresses:           eni.GetIPAddressesWithPrefixLength(),
-		GatewayIPAddresses:    []string{eni.GetSubnetGatewayIPv4Address()},
-		BlockInstanceMetadata: cfg.BlockInstanceMetadata,
+// NewVPCENINetworkConfig creates a new vpc-eni CNI plugin configuration.
+func NewVPCENINetworkConfig(eni *ni.NetworkInterface, cfg *Config) (string, *libcni.NetworkConfig, error) {
+	eniConf := VPCENIPluginConfig{
+		Type:               VPCENIPluginName,
+		ENIMACAddress:      eni.MacAddress,
+		ENIIPAddresses:     eni.GetIPAddressesWithPrefixLength(),
+		GatewayIPAddresses: []string{eni.GetSubnetGatewayIPv4Address()},
+		BlockIMDS:          cfg.BlockInstanceMetadata,
 	}
 
-	networkConfig, err := newNetworkConfig(eniConf, ECSENIPluginName, cfg.MinSupportedCNIVersion)
+	networkConfig, err := newNetworkConfig(eniConf, VPCENIPluginName, cfg.MinSupportedCNIVersion)
 	if err != nil {
 		return "", nil, fmt.Errorf("cni config: failed to create configuration: %w", err)
 	}
@@ -132,7 +131,7 @@ func NewENINetworkConfig(eni *eni.ENI, cfg *Config) (string, *libcni.NetworkConf
 }
 
 // NewBranchENINetworkConfig creates a new branch ENI CNI network configuration.
-func NewBranchENINetworkConfig(eni *eni.ENI, cfg *Config) (string, *libcni.NetworkConfig, error) {
+func NewBranchENINetworkConfig(eni *ni.NetworkInterface, cfg *Config) (string, *libcni.NetworkConfig, error) {
 	eniConf := BranchENIConfig{
 		Type:                  ECSBranchENIPluginName,
 		TrunkMACAddress:       eni.InterfaceVlanProperties.TrunkInterfaceMacAddress,

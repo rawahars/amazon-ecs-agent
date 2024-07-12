@@ -29,12 +29,13 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	ecsengine "github.com/aws/amazon-ecs-agent/agent/engine"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
 	"github.com/docker/docker/api/types"
+	dockercontainer "github.com/docker/docker/api/types/container"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ const (
 )
 
 const (
-	stats = `# TYPE MetricFamily3 histogram
+	testStats = `# TYPE MetricFamily3 histogram
 		MetricFamily3{dimensionX="value1", dimensionY="value2", le="0.5"} 1
 		MetricFamily3{dimensionX="value1", dimensionY="value2", le="1"} 2
 		MetricFamily3{dimensionX="value1", dimensionY="value2", le="5"} 3
@@ -89,12 +90,15 @@ func TestStatsEngineWithServiceConnectMetrics(t *testing.T) {
 			}
 
 			// Create a new docker stats engine
-			engine := NewDockerStatsEngine(&testConfig, dockerClient, eventStream("TestStatsEngineWithServiceConnectMetrics"))
+			engine := NewDockerStatsEngine(&testConfig, dockerClient, eventStream("TestStatsEngineWithServiceConnectMetrics"), nil, nil)
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()
 
 			// Assign ContainerStop timeout to addressable variable
-			timeout := defaultDockerTimeoutSeconds
+			timeout := int(defaultDockerTimeoutSeconds)
+			containerOptions := dockercontainer.StopOptions{
+				Timeout: &timeout,
+			}
 
 			// Create a container to get the container id.
 			container, err := createGremlin(client, "default")
@@ -106,11 +110,11 @@ func TestStatsEngineWithServiceConnectMetrics(t *testing.T) {
 
 			err = client.ContainerStart(ctx, container.ID, types.ContainerStartOptions{})
 			require.NoError(t, err, "starting container failed")
-			defer client.ContainerStop(ctx, container.ID, &timeout)
+			defer client.ContainerStop(ctx, container.ID, containerOptions)
 
 			containerChangeEventStream := eventStream("TestStatsEngineWithServiceConnectMetrics")
 			taskEngine := ecsengine.NewTaskEngine(&config.Config{}, nil, nil, containerChangeEventStream,
-				nil, dockerstate.NewTaskEngineState(), nil, nil, nil, nil)
+				nil, nil, dockerstate.NewTaskEngineState(), nil, nil, nil, nil, nil)
 			testTask := createRunningTask("bridge")
 			testTask.ServiceConnectConfig = &serviceconnect.Config{
 				ContainerName: serviceConnectContainerName,
@@ -144,7 +148,7 @@ func TestStatsEngineWithServiceConnectMetrics(t *testing.T) {
 			// simulate appnet server providing service connect metrics
 			r := mux.NewRouter()
 			r.HandleFunc(testStatsRestPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "%v", stats)
+				fmt.Fprintf(w, "%v", testStats)
 			}))
 			ts := httptest.NewUnstartedServer(r)
 			l, err := net.Listen("unix", testUDSPath)
@@ -166,7 +170,7 @@ func TestStatsEngineWithServiceConnectMetrics(t *testing.T) {
 			require.True(t, scStats.sent, "expected service connect metrics sent flag to be set")
 			validateEmptyTaskHealthMetrics(t, engine)
 
-			err = client.ContainerStop(ctx, container.ID, &timeout)
+			err = client.ContainerStop(ctx, container.ID, containerOptions)
 			require.NoError(t, err, "stopping container failed")
 
 			err = engine.containerChangeEventStream.WriteToEventStream(dockerapi.DockerContainerChangeEvent{

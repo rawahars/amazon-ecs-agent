@@ -19,13 +19,13 @@ import (
 	"time"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
-	"github.com/aws/amazon-ecs-agent/agent/api/task/status"
 	"github.com/aws/amazon-ecs-agent/agent/asm"
 	"github.com/aws/amazon-ecs-agent/agent/asm/factory"
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
 	resourcestatus "github.com/aws/amazon-ecs-agent/agent/taskresource/status"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
 
 	"github.com/cihub/seelog"
 	"github.com/docker/docker/api/types"
@@ -334,6 +334,16 @@ func (auth *ASMAuthResource) GetASMDockerAuthConfig(secretID string) (types.Auth
 
 	d, ok := auth.dockerAuthData[secretID]
 	return d, ok
+}
+
+// Stores provided docker auth config against the provided secret ID.
+func (auth *ASMAuthResource) PutASMDockerAuthConfig(secretID string, authCfg types.AuthConfig) {
+	auth.lock.Lock()
+	defer auth.lock.Unlock()
+	if auth.dockerAuthData == nil {
+		auth.dockerAuthData = make(map[string]types.AuthConfig)
+	}
+	auth.dockerAuthData[secretID] = authCfg
 }
 
 func (auth *ASMAuthResource) Initialize(resourceFields *taskresource.ResourceFields,

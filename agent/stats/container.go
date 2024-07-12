@@ -23,7 +23,8 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi"
 	"github.com/aws/amazon-ecs-agent/agent/stats/resolver"
-	"github.com/aws/amazon-ecs-agent/agent/utils/retry"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/logger"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/utils/retry"
 	"github.com/cihub/seelog"
 )
 
@@ -72,9 +73,10 @@ func (container *StatsContainer) collect() {
 	backoff := retry.NewExponentialBackoff(time.Second*1, time.Second*10, 0.5, 2)
 	for {
 		err := container.processStatsStream()
+
 		select {
 		case <-container.ctx.Done():
-			seelog.Infof("Container [%s]: Stopping stats collection", dockerID)
+			logger.Info("Stopping container stats collection", logger.Fields{"runtimeID": dockerID})
 			return
 		default:
 			if err != nil {
@@ -97,7 +99,7 @@ func (container *StatsContainer) collect() {
 				container.StopStatsCollection()
 				return
 			} else if terminal {
-				seelog.Infof("Container [%s]: container is terminal, stopping stats collection", dockerID)
+				logger.Info("Container is terminal, stopping stats collection", logger.Fields{"runtimeID": dockerID})
 				container.StopStatsCollection()
 				return
 			}

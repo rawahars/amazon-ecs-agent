@@ -23,10 +23,10 @@ import (
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/data"
-	"github.com/aws/amazon-ecs-agent/agent/ec2"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	mock_statemanager "github.com/aws/amazon-ecs-agent/agent/statemanager/mocks"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/ec2"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +65,9 @@ func TestCompatibilityEnabledSuccess(t *testing.T) {
 	defer cancel()
 
 	containerChangeEventStream := eventstream.NewEventStream("events", ctx)
-	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, execCmdMgr, serviceConnectManager)
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
+	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 
 	assert.NoError(t, err)
 	assert.True(t, cfg.TaskCPUMemLimit.Enabled())
@@ -106,7 +108,9 @@ func TestCompatibilityNotSetFail(t *testing.T) {
 	defer cancel()
 
 	containerChangeEventStream := eventstream.NewEventStream("events", ctx)
-	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, execCmdMgr, serviceConnectManager)
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
+	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 
 	assert.NoError(t, err)
 	assert.False(t, cfg.TaskCPUMemLimit.Enabled())
@@ -146,7 +150,9 @@ func TestCompatibilityExplicitlyEnabledFail(t *testing.T) {
 	defer cancel()
 
 	containerChangeEventStream := eventstream.NewEventStream("events", ctx)
-	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, execCmdMgr, serviceConnectManager)
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
+	_, _, err := agent.newTaskEngine(containerChangeEventStream, creds, dockerstate.NewTaskEngineState(), images, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 
 	assert.Error(t, err)
 }

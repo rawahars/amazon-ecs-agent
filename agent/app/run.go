@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/app/args"
-	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/version"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/logger"
 	"github.com/aws/aws-sdk-go/aws"
 	log "github.com/cihub/seelog"
 )
@@ -60,9 +60,11 @@ func Run(arguments []string) int {
 	}
 
 	if *parsedArgs.LogLevel != "" {
-		logger.SetLevel(*parsedArgs.LogLevel, *parsedArgs.LogLevel)
+		logger.SetDriverLogLevel(*parsedArgs.LogLevel)
+		logger.SetInstanceLogLevel(*parsedArgs.LogLevel)
 	} else {
-		logger.SetLevel(*parsedArgs.DriverLogLevel, *parsedArgs.InstanceLogLevel)
+		logger.SetDriverLogLevel(*parsedArgs.DriverLogLevel)
+		logger.SetInstanceLogLevel(*parsedArgs.InstanceLogLevel)
 	}
 
 	// Create an Agent object
@@ -74,7 +76,7 @@ func Run(arguments []string) int {
 	}
 
 	if agent.getConfig().EnableRuntimeStats.Enabled() {
-		defer logger.StartRuntimeStatsLogger(agent.getConfig())()
+		defer logger.StartRuntimeStatsLogger(agent.getConfig().RuntimeStatsLogFile)()
 	}
 
 	switch {

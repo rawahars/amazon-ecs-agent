@@ -16,8 +16,9 @@ package config
 import (
 	"time"
 
+	cniTypes "github.com/containernetworking/cni/pkg/types"
+
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
-	cnitypes "github.com/containernetworking/cni/pkg/types"
 )
 
 // ImagePullBehaviorType is an enum variable type corresponding to different agent pull
@@ -106,6 +107,9 @@ type Config struct {
 	// that is reported to Amazon ECS. Used by Amazon ECS when placing tasks on container instances.
 	// This doesn't reserve memory usage on the instance
 	ReservedMemory uint16
+
+	// ManifestPullTimeout is the amount of time to wait for a manifest pull
+	ManifestPullTimeout time.Duration
 
 	// DockerStopTimeout specifies the amount of time before a SIGKILL is issued to
 	// containers managed by ECS
@@ -247,12 +251,12 @@ type Config struct {
 	// will limit you to running one `awsvpc` task at a time. IPv4 addresses
 	// must be specified in decimal-octet form and also specify the subnet
 	// size (e.g., "169.254.172.42/22").
-	OverrideAWSVPCLocalIPv4Address *cnitypes.IPNet
+	OverrideAWSVPCLocalIPv4Address *cniTypes.IPNet
 
 	// AWSVPCAdditionalLocalRoutes allows the specification of routing table
 	// entries that will be added in the task's network namespace via the
 	// instance bridge interface rather than via the ENI.
-	AWSVPCAdditionalLocalRoutes []cnitypes.IPNet
+	AWSVPCAdditionalLocalRoutes []cniTypes.IPNet
 
 	// ContainerMetadataEnabled specifies if the agent should provide a metadata
 	// file for containers.
@@ -300,6 +304,11 @@ type Config struct {
 
 	// GPUSupportEnabled specifies if the Agent is capable of launching GPU tasks
 	GPUSupportEnabled bool
+
+	// EBSTASupportEnabled specifies if the Agent can support tasks needing EBS Task Attach, set in ecs-init
+	// Initially Agent always advertised EBSTA capability. This defaults to true to make it compatible with older ecs-init
+	EBSTASupportEnabled bool
+
 	// InferentiaSupportEnabled specifies whether the built-in support for inferentia task is enabled.
 	InferentiaSupportEnabled bool
 
@@ -331,12 +340,16 @@ type Config struct {
 	// It should be enabled by default only if the container instance is part of a valid active directory domain.
 	GMSACapable BooleanDefaultFalse
 
+	// GMSADomainlessCapable is the config option to indicate if gMSA domainless is supported.
+	// It should be enabled by if the container instance has a plugin to support active directory authentication.
+	GMSADomainlessCapable BooleanDefaultFalse
+
 	// VolumePluginCapabilities specifies the capabilities of the ecs volume plugin.
 	VolumePluginCapabilities []string
 
 	// FSxWindowsFileServerCapable is the config option to indicate if fsxWindowsFileServer is supported.
-	// It should be enabled by default only if the container instance is part of a valid active directory domain.
-	FSxWindowsFileServerCapable BooleanDefaultFalse
+	// It is enabled by default on Windows and can be overridden by the ECS_FSX_WINDOWS_FILE_SERVER_SUPPORTED environment variable.
+	FSxWindowsFileServerCapable BooleanDefaultTrue
 
 	// External specifies whether agent is running on external compute capacity (i.e. outside of aws).
 	External BooleanDefaultFalse
@@ -365,4 +378,10 @@ type Config struct {
 	// uses to assign host ports from, for a container port range mapping.
 	// This defaults to the platform specific ephemeral host port range
 	DynamicHostPortRange string
+
+	// TaskPidsLimit specifies the per-task pids limit cgroup setting for each
+	// task launched on this container instance. This setting maps to the pids.max
+	// cgroup setting at the ECS task level.
+	// see https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#pid
+	TaskPidsLimit int
 }

@@ -17,12 +17,14 @@ import (
 	"fmt"
 
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
-	"github.com/aws/amazon-ecs-agent/agent/logger"
+	taskresourcevolume "github.com/aws/amazon-ecs-agent/agent/taskresource/volume"
 	"github.com/aws/amazon-ecs-agent/ecs-agent/acs/model/ecsacs"
+	apiresource "github.com/aws/amazon-ecs-agent/ecs-agent/api/attachment/resource"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/logger"
 	"github.com/aws/aws-sdk-go/aws"
 )
 
-// AttachmentHandler defines an interface to handel attachment received from ACS.
+// AttachmentHandler defines an interface to handle attachment received from ACS.
 type AttachmentHandler interface {
 	parseAttachment(acsAttachment *ecsacs.Attachment) error
 	validateAttachment(acsTask *ecsacs.Task, task *Task) error
@@ -76,10 +78,13 @@ func (scAttachment *ServiceConnectAttachmentHandler) validateAttachment(acsTask 
 func handleTaskAttachments(acsTask *ecsacs.Task, task *Task) error {
 	if acsTask.Attachments != nil {
 		var serviceConnectAttachment *ecsacs.Attachment
+		var ebsVolumeAttachments []*ecsacs.Attachment
 		for _, attachment := range acsTask.Attachments {
 			switch aws.StringValue(attachment.AttachmentType) {
 			case serviceConnectAttachmentType:
 				serviceConnectAttachment = attachment
+			case apiresource.EBSTaskAttach:
+				ebsVolumeAttachments = append(ebsVolumeAttachments, attachment)
 			default:
 				logger.Debug("Received an attachment type", logger.Fields{
 					"attachmentType": attachment.AttachmentType,
@@ -103,6 +108,30 @@ func handleTaskAttachments(acsTask *ecsacs.Task, task *Task) error {
 				return fmt.Errorf("service connect config validation failed: %w", err)
 			}
 			task.ServiceConnectConfig = scHandler.(*ServiceConnectAttachmentHandler).scConfig
+		}
+		if len(ebsVolumeAttachments) > 0 {
+			ebsVolumes := make(map[string]bool)
+			for _, attachment := range ebsVolumeAttachments {
+				ebs, err := taskresourcevolume.ParseEBSTaskVolumeAttachment(attachment)
+				if err != nil {
+					return fmt.Errorf("unable to parse and validate EBS volume: %w", err)
+				}
+				taskVolume := TaskVolume{
+					Name:   ebs.VolumeName,
+					Type:   apiresource.EBSTaskAttach,
+					Volume: ebs,
+				}
+				ebsVolumes[ebs.VolumeName] = true
+				task.Volumes = append(task.Volumes, taskVolume)
+			}
+			// We're removing all incorrect volume configuration that were intially passed over from ACS
+			for index, tv := range task.Volumes {
+				volumeName := tv.Name
+				volumeType := tv.Type
+				if ebsVolumes[volumeName] && volumeType != apiresource.EBSTaskAttach {
+					task.RemoveVolume(index)
+				}
+			}
 		}
 	}
 	return nil

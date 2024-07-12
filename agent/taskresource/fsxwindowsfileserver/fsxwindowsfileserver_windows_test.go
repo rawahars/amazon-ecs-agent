@@ -18,6 +18,7 @@ package fsxwindowsfileserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"testing"
@@ -25,17 +26,17 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 
-	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
 	mock_asm_factory "github.com/aws/amazon-ecs-agent/agent/asm/factory/mocks"
 	mock_secretsmanageriface "github.com/aws/amazon-ecs-agent/agent/asm/mocks"
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
-	mock_credentials "github.com/aws/amazon-ecs-agent/agent/credentials/mocks"
 	mock_fsx_factory "github.com/aws/amazon-ecs-agent/agent/fsx/factory/mocks"
 	mock_fsxiface "github.com/aws/amazon-ecs-agent/agent/fsx/mocks"
 	mock_ssm_factory "github.com/aws/amazon-ecs-agent/agent/ssm/factory/mocks"
 	mock_ssmiface "github.com/aws/amazon-ecs-agent/agent/ssm/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
 	resourcestatus "github.com/aws/amazon-ecs-agent/agent/taskresource/status"
+	apitaskstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
+	mock_credentials "github.com/aws/amazon-ecs-agent/ecs-agent/credentials/mocks"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/fsx"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
@@ -142,7 +143,7 @@ func TestRetrieveCredentials(t *testing.T) {
 		InvalidParameters: []*string{},
 		Parameters: []*ssm.Parameter{
 			&ssm.Parameter{
-				Name:  aws.String("test"),
+				Name:  aws.String("/test"),
 				Value: aws.String(ssmTestData),
 			},
 		},
@@ -166,35 +167,74 @@ func TestRetrieveCredentials(t *testing.T) {
 }
 
 func TestRetrieveSSMCredentials(t *testing.T) {
-	fv, _, ssmClientCreator, _, _, mockSSMClient, _, _ := setup(t)
-	credentialsParameterARN := "arn:aws:ssm:us-west-2:123456789012:parameter/test"
-
-	ssmTestData := "{\n\"username\": \"user\", \n\"password\": \"pass\"\n}"
-	ssmClientOutput := &ssm.GetParametersOutput{
-		InvalidParameters: []*string{},
-		Parameters: []*ssm.Parameter{
-			&ssm.Parameter{
-				Name:  aws.String("test"),
-				Value: aws.String(ssmTestData),
-			},
+	cases := []struct {
+		Name                     string
+		CredentialsParameterARN  string
+		CredentialsParameterName string
+	}{
+		{
+			Name:                     "TestRetrieveSSMCredentialsSimple",
+			CredentialsParameterARN:  "arn:aws:ssm:us-west-2:123456789012:parameter/hello",
+			CredentialsParameterName: "/hello",
+		},
+		{
+			Name:                     "TestRetrieveSSMCredentialsPath",
+			CredentialsParameterARN:  "arn:aws:ssm:us-west-2:123456789012:parameter/path1/path2/hello",
+			CredentialsParameterName: "/path1/path2/hello",
+		},
+		{
+			Name:                     "TestRetrieveSSMCredentialsSimpleWithParameter",
+			CredentialsParameterARN:  "arn:aws:ssm:us-east-2:958991572715:parameter/parameter",
+			CredentialsParameterName: "/parameter",
+		},
+		{
+			Name:                     "TestRetrieveSSMCredentialsPathWithParameter",
+			CredentialsParameterARN:  "arn:aws:ssm:us-east-2:958991572715:parameter/path1/path2/parameter",
+			CredentialsParameterName: "/path1/path2/parameter",
+		},
+		{
+			Name:                     "TestRetrieveSSMCredentialsPathWithParameter2",
+			CredentialsParameterARN:  "arn:aws:ssm:us-east-2:958991572715:parameter/path1/parameter/hello",
+			CredentialsParameterName: "/path1/parameter/hello",
 		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			fv, _, ssmClientCreator, _, _, mockSSMClient, _, _ := setup(t)
+			credentialsParameterARN := tc.CredentialsParameterARN
 
-	iamCredentials := credentials.IAMRoleCredentials{
-		CredentialsID: "test-cred-id",
+			ssmTestData := "{\n\"username\": \"user\", \n\"password\": \"pass\"\n}"
+			ssmClientOutput := &ssm.GetParametersOutput{
+				InvalidParameters: []*string{},
+				Parameters: []*ssm.Parameter{
+					&ssm.Parameter{
+						Name:  aws.String(tc.CredentialsParameterName),
+						Value: aws.String(ssmTestData),
+					},
+				},
+			}
+
+			iamCredentials := credentials.IAMRoleCredentials{
+				CredentialsID: "test-cred-id",
+			}
+
+			gomock.InOrder(
+				ssmClientCreator.EXPECT().NewSSMClient(gomock.Any(), gomock.Any()).Return(mockSSMClient),
+				mockSSMClient.EXPECT().GetParameters(&ssm.GetParametersInput{
+					Names:          []*string{&tc.CredentialsParameterName},
+					WithDecryption: aws.Bool(false),
+				}).Return(ssmClientOutput, nil).Times(1),
+			)
+
+			err := fv.retrieveSSMCredentials(credentialsParameterARN, iamCredentials)
+			assert.NoError(t, err)
+
+			credentials := fv.Credentials
+			assert.Equal(t, "user", credentials.Username)
+			assert.Equal(t, "pass", credentials.Password)
+		})
 	}
 
-	gomock.InOrder(
-		ssmClientCreator.EXPECT().NewSSMClient(gomock.Any(), gomock.Any()).Return(mockSSMClient),
-		mockSSMClient.EXPECT().GetParameters(gomock.Any()).Return(ssmClientOutput, nil).Times(1),
-	)
-
-	err := fv.retrieveSSMCredentials(credentialsParameterARN, iamCredentials)
-	assert.NoError(t, err)
-
-	credentials := fv.Credentials
-	assert.Equal(t, "user", credentials.Username)
-	assert.Equal(t, "pass", credentials.Password)
 }
 
 func TestRetrieveASMCredentials(t *testing.T) {
@@ -488,7 +528,7 @@ func TestCreateUnavailableLocalPath(t *testing.T) {
 		InvalidParameters: []*string{},
 		Parameters: []*ssm.Parameter{
 			&ssm.Parameter{
-				Name:  aws.String("test"),
+				Name:  aws.String("/test"),
 				Value: aws.String(ssmTestData),
 			},
 		},
@@ -573,7 +613,7 @@ func TestCreateSSM(t *testing.T) {
 		InvalidParameters: []*string{},
 		Parameters: []*ssm.Parameter{
 			&ssm.Parameter{
-				Name:  aws.String("test"),
+				Name:  aws.String("/test"),
 				Value: aws.String(ssmTestData),
 			},
 		},
@@ -708,5 +748,19 @@ func TestClearFSxWindowsFileServerResource(t *testing.T) {
 	defer func() { execCommand = exec.Command }()
 
 	err := fv.Cleanup()
+	assert.NoError(t, err)
+}
+
+func TestSpecialCharactersInPasswordPSCommand(t *testing.T) {
+	username := "Administrator"
+	password := "AWS@`~!@#$var%^&*()/1asd"
+
+	credsCommand := fmt.Sprintf(psCredentialCommandFormat, username, password)
+
+	// Perform actual exec to determine if the credentials are generated.
+	// Go tests are platform specific and therefore, this would work.
+	cmd := exec.Command("powershell.exe", credsCommand)
+	_, err := cmd.CombinedOutput()
+
 	assert.NoError(t, err)
 }

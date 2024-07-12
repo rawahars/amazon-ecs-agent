@@ -22,16 +22,16 @@ import (
 	"testing"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	"github.com/aws/amazon-ecs-agent/agent/api/eni"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
 	"github.com/aws/amazon-ecs-agent/agent/app/factory"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/data"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/engine/image"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
-
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/attachment"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
+	ni "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/networkinterface"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,10 +75,12 @@ var (
 		ImageID: testImageId,
 	}
 
-	testENIAttachment = &eni.ENIAttachment{
-		AttachmentARN:    testAttachmentArn,
-		AttachStatusSent: false,
-		MACAddress:       testMac,
+	testENIAttachment = &ni.ENIAttachment{
+		AttachmentInfo: attachment.AttachmentInfo{
+			AttachmentARN:    testAttachmentArn,
+			AttachStatusSent: false,
+		},
+		MACAddress: testMac,
 	}
 )
 
@@ -109,9 +111,12 @@ func TestLoadDataNoPreviousState(t *testing.T) {
 		stateManagerFactory:   stateManagerFactory,
 		saveableOptionFactory: factory.NewSaveableOption(),
 	}
+	state := dockerstate.NewTaskEngineState()
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
 
-	_, err := agent.loadData(eventstream.NewEventStream("events", ctx),
-		credentialsManager, dockerstate.NewTaskEngineState(), imageManager, execCmdMgr, serviceConnectManager)
+	_, err := agent.loadData(eventstream.NewEventStream("events", ctx), credentialsManager,
+		state, imageManager, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 	assert.NoError(t, err)
 }
 
@@ -140,8 +145,10 @@ func TestLoadDataLoadFromBoltDB(t *testing.T) {
 	}
 
 	state := dockerstate.NewTaskEngineState()
-	s, err := agent.loadData(eventstream.NewEventStream("events", ctx),
-		credentialsManager, state, imageManager, execCmdMgr, serviceConnectManager)
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
+	s, err := agent.loadData(eventstream.NewEventStream("events", ctx), credentialsManager,
+		state, imageManager, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 	assert.NoError(t, err)
 	checkLoadedData(state, s, t)
 }
@@ -178,8 +185,10 @@ func TestLoadDataLoadFromStateFile(t *testing.T) {
 	}
 
 	state := dockerstate.NewTaskEngineState()
-	s, err := agent.loadData(eventstream.NewEventStream("events", ctx),
-		credentialsManager, state, imageManager, execCmdMgr, serviceConnectManager)
+	hostResources := getTestHostResources()
+	daemonManagers := getTestDaemonManagers()
+	s, err := agent.loadData(eventstream.NewEventStream("events", ctx), credentialsManager,
+		state, imageManager, hostResources, execCmdMgr, serviceConnectManager, daemonManagers)
 	assert.NoError(t, err)
 	checkLoadedData(state, s, t)
 

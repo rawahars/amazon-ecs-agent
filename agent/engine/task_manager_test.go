@@ -30,29 +30,31 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
 	mock_taskresource "github.com/aws/amazon-ecs-agent/agent/taskresource/mocks"
 	resourcestatus "github.com/aws/amazon-ecs-agent/agent/taskresource/status"
-	utilsync "github.com/aws/amazon-ecs-agent/agent/utils/sync"
 
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
-	apieni "github.com/aws/amazon-ecs-agent/agent/api/eni"
-	apierrors "github.com/aws/amazon-ecs-agent/agent/api/errors"
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
-	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
 	"github.com/aws/amazon-ecs-agent/agent/config"
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
-	mock_credentials "github.com/aws/amazon-ecs-agent/agent/credentials/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/data"
 	mock_dockerapi "github.com/aws/amazon-ecs-agent/agent/dockerclient/dockerapi/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dependencygraph"
 	mock_dockerstate "github.com/aws/amazon-ecs-agent/agent/engine/dockerstate/mocks"
 	mock_engine "github.com/aws/amazon-ecs-agent/agent/engine/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/engine/testdata"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/statechange"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource/volume"
-	mock_ttime "github.com/aws/amazon-ecs-agent/agent/utils/ttime/mocks"
+	taskresourcevolume "github.com/aws/amazon-ecs-agent/agent/taskresource/volume"
+	apiresource "github.com/aws/amazon-ecs-agent/ecs-agent/api/attachment/resource"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
+	apierrors "github.com/aws/amazon-ecs-agent/ecs-agent/api/errors"
+	apitaskstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
+	mock_credentials "github.com/aws/amazon-ecs-agent/ecs-agent/credentials/mocks"
+	mock_csiclient "github.com/aws/amazon-ecs-agent/ecs-agent/csiclient/mocks"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
+	ni "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/networkinterface"
+	mock_ttime "github.com/aws/amazon-ecs-agent/ecs-agent/utils/ttime/mocks"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/golang/mock/gomock"
@@ -102,6 +104,36 @@ func TestHandleEventError(t *testing.T) {
 			ExpectedContainerKnownStatus:          apicontainerstatus.ContainerStopped,
 			ExpectedContainerDesiredStatusStopped: true,
 			ExpectedOK:                            true,
+		},
+		{
+			Name:              "Manifest pull failed - default pull behavior",
+			EventStatus:       apicontainerstatus.ContainerManifestPulled,
+			ImagePullBehavior: config.ImagePullDefaultBehavior,
+			Error:             &dockerapi.DockerTimeoutError{},
+			ExpectedOK:        true,
+		},
+		{
+			Name:                             "Manifest pull failed - always pull behavior",
+			EventStatus:                      apicontainerstatus.ContainerManifestPulled,
+			ImagePullBehavior:                config.ImagePullAlwaysBehavior,
+			Error:                            &dockerapi.DockerTimeoutError{},
+			ExpectedTaskDesiredStatusStopped: true,
+			ExpectedOK:                       false,
+		},
+		{
+			Name:                             "Manifest pull failed - once pull behavior",
+			EventStatus:                      apicontainerstatus.ContainerManifestPulled,
+			ImagePullBehavior:                config.ImagePullOnceBehavior,
+			Error:                            &dockerapi.DockerTimeoutError{},
+			ExpectedTaskDesiredStatusStopped: true,
+			ExpectedOK:                       false,
+		},
+		{
+			Name:              "Manifest pull failed - prefer-cached pull behavior",
+			EventStatus:       apicontainerstatus.ContainerManifestPulled,
+			ImagePullBehavior: config.ImagePullPreferCachedBehavior,
+			Error:             &dockerapi.DockerTimeoutError{},
+			ExpectedOK:        true,
 		},
 		{
 			Name:                            "Pull failed",
@@ -246,17 +278,27 @@ func TestContainerNextState(t *testing.T) {
 		reason                       dependencygraph.DependencyError
 	}{
 		// NONE -> RUNNING transition is allowed and actionable, when desired is Running
-		// The expected next status is Pulled
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, true, nil},
+		// The expected next status is MANIFEST_PULLED
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerManifestPulled, true, nil},
 		// NONE -> RESOURCES_PROVISIONED transition is allowed and actionable, when desired
-		// is Running. The exptected next status is Pulled
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerResourcesProvisioned, apicontainerstatus.ContainerPulled, true, nil},
+		// is Running. The exptected next status is MANIFEST_PULLED
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerResourcesProvisioned, apicontainerstatus.ContainerManifestPulled, true, nil},
 		// NONE -> NONE transition is not be allowed and is not actionable,
 		// when desired is Running
 		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerStatusNone, false, dependencygraph.ContainerPastDesiredStatusErr},
 		// NONE -> STOPPED transition will result in STOPPED and is allowed, but not
 		// actionable, when desired is STOPPED
 		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped, false, nil},
+		// MANIFEST_PULLED -> PULLED transition is allowed and actionable, when desired is Running
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, true, nil},
+		// MANIFEST_PULLED -> PULLED transition is allowed and actionable, when desired is RESOURCES_PROVISIONED
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerResourcesProvisioned, apicontainerstatus.ContainerPulled, true, nil},
+		// MANIFEST_PULLED -> MANIFEST_PULLED transition is not allowed and not actionable
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerStatusNone, false, dependencygraph.ContainerPastDesiredStatusErr},
+		// MANIFEST_PULLED -> NONE transition is not allowed and not actionable
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerStatusNone, false, dependencygraph.ContainerPastDesiredStatusErr},
+		// MANIFEST_PULLED -> STOPPED transition will result in STOPPED and is allowed, but not actionable
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped, false, nil},
 		// PULLED -> RUNNING transition is allowed and actionable, when desired is Running
 		// The exptected next status is Created
 		{apicontainerstatus.ContainerPulled, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerCreated, true, nil},
@@ -374,10 +416,34 @@ func TestContainerNextStateWithTransitionDependencies(t *testing.T) {
 		expectedTransitionActionable bool
 		reason                       error
 	}{
+		// NONE -> RUNNING transition is not allowed and not actionable, when manifest_pull depends on create and dependency is None
+		{
+			name:                         "manifest_pull depends on created, dependency is none",
+			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
+			containerDependentStatus:     apicontainerstatus.ContainerManifestPulled,
+			dependencyCurrentStatus:      apicontainerstatus.ContainerStatusNone,
+			dependencySatisfiedStatus:    apicontainerstatus.ContainerCreated,
+			expectedContainerStatus:      apicontainerstatus.ContainerStatusNone,
+			expectedTransitionActionable: false,
+			reason:                       dependencygraph.ErrContainerDependencyNotResolved,
+		},
+		// NONE -> RUNNING transition is not allowed and not actionable, when desired is Running and dependency is Created
+		{
+			name:                         "manifest_pull depends on running, dependency is created",
+			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
+			containerDependentStatus:     apicontainerstatus.ContainerManifestPulled,
+			dependencyCurrentStatus:      apicontainerstatus.ContainerCreated,
+			dependencySatisfiedStatus:    apicontainerstatus.ContainerRunning,
+			expectedContainerStatus:      apicontainerstatus.ContainerStatusNone,
+			expectedTransitionActionable: false,
+			reason:                       dependencygraph.ErrContainerDependencyNotResolved,
+		},
 		// NONE -> RUNNING transition is not allowed and not actionable, when pull depends on create and dependency is None
 		{
-			name:                         "pull depends on created, dependency is none",
-			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			name:                         "pull depends on created, current is manifest_pulled, dependency is none",
+			containerCurrentStatus:       apicontainerstatus.ContainerManifestPulled,
 			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
 			containerDependentStatus:     apicontainerstatus.ContainerPulled,
 			dependencyCurrentStatus:      apicontainerstatus.ContainerStatusNone,
@@ -388,8 +454,8 @@ func TestContainerNextStateWithTransitionDependencies(t *testing.T) {
 		},
 		// NONE -> RUNNING transition is not allowed and not actionable, when desired is Running and dependency is Created
 		{
-			name:                         "pull depends on running, dependency is created",
-			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			name:                         "pull depends on running, current is manifest_pulled, dependency is created",
+			containerCurrentStatus:       apicontainerstatus.ContainerManifestPulled,
 			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
 			containerDependentStatus:     apicontainerstatus.ContainerPulled,
 			dependencyCurrentStatus:      apicontainerstatus.ContainerCreated,
@@ -402,7 +468,7 @@ func TestContainerNextStateWithTransitionDependencies(t *testing.T) {
 		// The expected next status is Pulled
 		{
 			name:                         "pull depends on running, dependency is running, next status is pulled",
-			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			containerCurrentStatus:       apicontainerstatus.ContainerManifestPulled,
 			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
 			containerDependentStatus:     apicontainerstatus.ContainerPulled,
 			dependencyCurrentStatus:      apicontainerstatus.ContainerRunning,
@@ -414,7 +480,7 @@ func TestContainerNextStateWithTransitionDependencies(t *testing.T) {
 		// The expected next status is Pulled
 		{
 			name:                         "pull depends on running, dependency is stopped, next status is pulled",
-			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
+			containerCurrentStatus:       apicontainerstatus.ContainerManifestPulled,
 			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
 			containerDependentStatus:     apicontainerstatus.ContainerPulled,
 			dependencyCurrentStatus:      apicontainerstatus.ContainerStopped,
@@ -425,13 +491,13 @@ func TestContainerNextStateWithTransitionDependencies(t *testing.T) {
 		// NONE -> RUNNING transition is allowed and actionable, when desired is Running and dependency is None and
 		// dependent status is Running
 		{
-			name:                         "create depends on running, dependency is none, next status is pulled",
+			name:                         "create depends on running, dependency is none, next status is manifest_pulled",
 			containerCurrentStatus:       apicontainerstatus.ContainerStatusNone,
 			containerDesiredStatus:       apicontainerstatus.ContainerRunning,
 			containerDependentStatus:     apicontainerstatus.ContainerCreated,
 			dependencyCurrentStatus:      apicontainerstatus.ContainerStatusNone,
 			dependencySatisfiedStatus:    apicontainerstatus.ContainerRunning,
-			expectedContainerStatus:      apicontainerstatus.ContainerPulled,
+			expectedContainerStatus:      apicontainerstatus.ContainerManifestPulled,
 			expectedTransitionActionable: true,
 		},
 	}
@@ -483,11 +549,11 @@ func TestContainerNextStateWithDependencies(t *testing.T) {
 		// NONE -> RUNNING transition is not allowed and not actionable, when desired is Running and dependency is Created
 		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerCreated, apicontainerstatus.ContainerStatusNone, false, dependencygraph.DependentContainerNotResolvedErr},
 		// NONE -> RUNNING transition is allowed and actionable, when desired is Running and dependency is Running
-		// The expected next status is Pulled
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, true, nil},
+		// The expected next status is MANIFEST_PULLED
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerManifestPulled, true, nil},
 		// NONE -> RUNNING transition is allowed and actionable, when desired is Running and dependency is Stopped
-		// The expected next status is Pulled
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerPulled, true, nil},
+		// The expected next status is MANIFEST_PULLED
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerManifestPulled, true, nil},
 	}
 
 	for _, tc := range testCases {
@@ -536,13 +602,17 @@ func TestContainerNextStateWithPullCredentials(t *testing.T) {
 		// NONE -> RUNNING transition is not allowed when container is waiting for credentials
 		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerStatusNone, "not_existed", true, false, dependencygraph.CredentialsNotResolvedErr},
 		// NONE -> RUNNING transition is allowed when the required execution credentials existed
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, "existed", true, true, nil},
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerManifestPulled, "existed", true, true, nil},
+		// MANIFEST_PULLED -> RUNNING transition is not allowed when the credentials don't exist
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerStatusNone, "not_existed", true, false, dependencygraph.CredentialsNotResolvedErr},
+		// MANIFEST_PULLED -> RUNNING transition is allowed when the credentials exist
+		{apicontainerstatus.ContainerManifestPulled, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, "existed", true, true, nil},
 		// PULLED -> RUNNING transition is allowed even the credentials is required
 		{apicontainerstatus.ContainerPulled, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerCreated, "not_existed", true, true, nil},
 		// NONE -> STOPPED transition is allowed even the credentials is required
 		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped, "not_existed", true, false, nil},
 		// NONE -> RUNNING transition is allowed when the container doesn't use execution credentials
-		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled, "not_existed", false, true, nil},
+		{apicontainerstatus.ContainerStatusNone, apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerManifestPulled, "not_existed", false, true, nil},
 	}
 
 	taskEngine := &DockerTaskEngine{
@@ -831,6 +901,7 @@ func TestStartContainerTransitionsInvokesHandleContainerChange(t *testing.T) {
 	containerChangeEventStream := eventstream.NewEventStream(eventStreamName, context.Background())
 	containerChangeEventStream.StartListening()
 
+	hostResourceManager := NewHostResourceManager(getTestHostResources())
 	stateChangeEvents := make(chan statechange.Event)
 
 	task := &managedTask{
@@ -844,6 +915,7 @@ func TestStartContainerTransitionsInvokesHandleContainerChange(t *testing.T) {
 			containerChangeEventStream: containerChangeEventStream,
 			stateChangeEvents:          stateChangeEvents,
 			dataClient:                 data.NewNoopClient(),
+			hostResourceManager:        &hostResourceManager,
 		},
 		stateChangeEvents:          stateChangeEvents,
 		containerChangeEventStream: containerChangeEventStream,
@@ -964,13 +1036,15 @@ func TestWaitForContainerTransitionsForTerminalTask(t *testing.T) {
 
 func TestOnContainersUnableToTransitionStateForDesiredStoppedTask(t *testing.T) {
 	stateChangeEvents := make(chan statechange.Event)
+	hostResourceManager := NewHostResourceManager(getTestHostResources())
 	task := &managedTask{
 		Task: &apitask.Task{
 			Containers:          []*apicontainer.Container{},
 			DesiredStatusUnsafe: apitaskstatus.TaskStopped,
 		},
 		engine: &DockerTaskEngine{
-			stateChangeEvents: stateChangeEvents,
+			stateChangeEvents:   stateChangeEvents,
+			hostResourceManager: &hostResourceManager,
 		},
 		stateChangeEvents: stateChangeEvents,
 		ctx:               context.TODO(),
@@ -1339,16 +1413,16 @@ func TestCleanupTaskENIs(t *testing.T) {
 		resourceStateChangeEvent: make(chan resourceStateChange),
 		cfg:                      taskEngine.cfg,
 	}
-	mTask.AddTaskENI(&apieni.ENI{
+	mTask.AddTaskENI(&ni.NetworkInterface{
 		ID: "TestCleanupTaskENIs",
-		IPV4Addresses: []*apieni.ENIIPV4Address{
+		IPV4Addresses: []*ni.IPV4Address{
 			{
 				Primary: true,
 				Address: ipv4,
 			},
 		},
 		MacAddress: mac,
-		IPV6Addresses: []*apieni.ENIIPV6Address{
+		IPV6Addresses: []*ni.IPV6Address{
 			{
 				Address: ipv6,
 			},
@@ -1417,7 +1491,8 @@ func TestTaskWaitForExecutionCredentials(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()
 			task := &managedTask{
-				ctx: ctx,
+				ctx:    ctx,
+				engine: &DockerTaskEngine{},
 				Task: &apitask.Task{
 					KnownStatusUnsafe:   apitaskstatus.TaskRunning,
 					DesiredStatusUnsafe: apitaskstatus.TaskRunning,
@@ -1778,31 +1853,6 @@ func TestHandleContainerChangeUpdateMetadataRedundant(t *testing.T) {
 	assert.Equal(t, exitCode, *containerExitCode)
 	containerCreateTime := container.GetCreatedAt()
 	assert.Equal(t, timeNow, containerCreateTime)
-}
-
-func TestWaitForHostResources(t *testing.T) {
-	taskStopWG := utilsync.NewSequentialWaitGroup()
-	taskStopWG.Add(1, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	mtask := &managedTask{
-		ctx:        ctx,
-		cancel:     cancel,
-		taskStopWG: taskStopWG,
-		Task: &apitask.Task{
-			StartSequenceNumber: 1,
-		},
-	}
-
-	var waitForHostResourcesWG sync.WaitGroup
-	waitForHostResourcesWG.Add(1)
-	go func() {
-		mtask.waitForHostResources()
-		waitForHostResourcesWG.Done()
-	}()
-
-	taskStopWG.Done(1)
-	waitForHostResourcesWG.Wait()
 }
 
 func TestWaitForResourceTransition(t *testing.T) {
@@ -2192,6 +2242,119 @@ func TestContainerNextStateDependsStoppedContainer(t *testing.T) {
 			transition := mtask.containerNextState(containerToBeStopped)
 			assert.Equal(t, tc.actionRequired, transition.actionRequired)
 			assert.Equal(t, tc.err, transition.reason)
+		})
+	}
+}
+
+// TestTaskWaitForHostResources tests task queuing behavior based on available host resources
+func TestTaskWaitForHostResources(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	// 1 vCPU available on host
+	hostResourceManager := NewHostResourceManager(getTestHostResources())
+	taskEngine := &DockerTaskEngine{
+		managedTasks:           make(map[string]*managedTask),
+		monitorQueuedTaskEvent: make(chan struct{}, 1),
+		hostResourceManager:    &hostResourceManager,
+	}
+	go taskEngine.monitorQueuedTasks(ctx)
+	// 3 tasks requesting 0.5 vCPUs each
+	tasks := []*apitask.Task{}
+	for i := 0; i < 3; i++ {
+		task := testdata.LoadTask("sleep5")
+		task.Arn = fmt.Sprintf("arn%d", i)
+		task.CPU = float64(0.5)
+		mtask := &managedTask{
+			Task:                      task,
+			engine:                    taskEngine,
+			consumedHostResourceEvent: make(chan struct{}, 1),
+		}
+		tasks = append(tasks, task)
+		taskEngine.managedTasks[task.Arn] = mtask
+	}
+
+	// acquire for host resources order arn0, arn1, arn2
+	go func() {
+		taskEngine.managedTasks["arn0"].waitForHostResources()
+		taskEngine.managedTasks["arn1"].waitForHostResources()
+		taskEngine.managedTasks["arn2"].waitForHostResources()
+	}()
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify waiting queue is waiting at arn2
+	topTask, err := taskEngine.topTask()
+	assert.NoError(t, err)
+	assert.Equal(t, topTask.Arn, "arn2")
+
+	// Remove 1 task
+	taskResources := taskEngine.managedTasks["arn0"].ToHostResources()
+	taskEngine.hostResourceManager.release("arn0", taskResources)
+	taskEngine.wakeUpTaskQueueMonitor()
+
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify arn2 got dequeued
+	topTask, err = taskEngine.topTask()
+	assert.Error(t, err)
+}
+
+func TestUnstageVolumes(t *testing.T) {
+	tcs := []struct {
+		name      string
+		err       error
+		numErrors int
+	}{
+		{
+			name:      "Success",
+			err:       nil,
+			numErrors: 0,
+		},
+		{
+			name:      "Failure",
+			err:       errors.New("unable to unstage volume"),
+			numErrors: 1,
+		},
+		{
+			name:      "TimeoutFailure",
+			err:       errors.New("rpc error: code = DeadlineExceeded desc = context deadline exceeded"),
+			numErrors: 1,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+			mtask := &managedTask{
+				Task: &apitask.Task{
+					ResourcesMapUnsafe:  make(map[string][]taskresource.TaskResource),
+					DesiredStatusUnsafe: apitaskstatus.TaskRunning,
+					Volumes: []apitask.TaskVolume{
+						{
+							Name: taskresourcevolume.TestVolumeName,
+							Type: apiresource.EBSTaskAttach,
+							Volume: &taskresourcevolume.EBSTaskVolumeConfig{
+								VolumeId:             taskresourcevolume.TestVolumeId,
+								VolumeName:           taskresourcevolume.TestVolumeId,
+								VolumeSizeGib:        taskresourcevolume.TestVolumeSizeGib,
+								SourceVolumeHostPath: taskresourcevolume.TestSourceVolumeHostPath,
+								DeviceName:           taskresourcevolume.TestDeviceName,
+								FileSystem:           taskresourcevolume.TestFileSystem,
+							},
+						},
+					},
+				},
+				ctx:                      ctx,
+				resourceStateChangeEvent: make(chan resourceStateChange),
+			}
+			mockCsiClient := mock_csiclient.NewMockCSIClient(mockCtrl)
+			mockCsiClient.EXPECT().NodeUnstageVolume(gomock.Any(), "vol-12345", "/mnt/ecs/ebs/taskarn_vol-12345").Return(tc.err).MinTimes(1).MaxTimes(5)
+
+			errors := mtask.UnstageVolumes(mockCsiClient)
+			assert.Len(t, errors, tc.numErrors)
 		})
 	}
 }

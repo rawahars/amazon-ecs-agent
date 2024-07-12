@@ -25,7 +25,11 @@ func parseGMSACapability() BooleanDefaultFalse {
 	return BooleanDefaultFalse{Value: ExplicitlyDisabled}
 }
 
-func parseFSxWindowsFileServerCapability() BooleanDefaultFalse {
+func parseFSxWindowsFileServerCapability() BooleanDefaultTrue {
+	return BooleanDefaultTrue{Value: ExplicitlyDisabled}
+}
+
+func parseGMSADomainlessCapability() BooleanDefaultFalse {
 	return BooleanDefaultFalse{Value: ExplicitlyDisabled}
 }
 
@@ -36,4 +40,8 @@ var IsWindows2016 = func() (bool, error) {
 // GetOSFamily returns "UNSUPPORTED" as operating system family for non-windows based ecs instances.
 func GetOSFamily() string {
 	return strings.ToUpper(OSType)
+}
+
+func parseTaskPidsLimit() int {
+	return 0
 }

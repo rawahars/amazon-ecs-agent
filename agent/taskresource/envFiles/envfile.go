@@ -23,9 +23,6 @@ import (
 	"time"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
-	"github.com/aws/amazon-ecs-agent/agent/api/task/status"
-	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/s3"
 	"github.com/aws/amazon-ecs-agent/agent/s3/factory"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
@@ -33,7 +30,10 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/utils/bufiowrapper"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ioutilwrapper"
 	"github.com/aws/amazon-ecs-agent/agent/utils/oswrapper"
-	"github.com/aws/amazon-ecs-agent/agent/utils/retry"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/credentials"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/utils/retry"
 
 	"github.com/cihub/seelog"
 	"github.com/pkg/errors"
@@ -570,11 +570,11 @@ func (envfile *EnvironmentFileResource) readEnvVarsFromFile(envfilePath string) 
 		// only read the line that has "="
 		if strings.Contains(line, envVariableDelimiter) {
 			variables := strings.SplitN(line, envVariableDelimiter, 2)
-			// verify that there is at least a character on each side
-			if len(variables[0]) > 0 && len(variables[1]) > 0 {
+			// verify that the key is non-empty, the value can be empty
+			if len(variables[0]) > 0 {
 				envVars[variables[0]] = variables[1]
 			} else {
-				seelog.Infof("Not applying line %d of environment file %s, key or value is empty.", lineNum, envfilePath)
+				seelog.Infof("Not applying line %d of environment file %s, key is empty.", lineNum, envfilePath)
 			}
 		}
 	}

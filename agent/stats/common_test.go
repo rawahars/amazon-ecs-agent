@@ -1,3 +1,6 @@
+//go:build unit || sudo || integration
+// +build unit sudo integration
+
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
@@ -23,10 +26,11 @@ import (
 	apitask "github.com/aws/amazon-ecs-agent/agent/api/task"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/data"
-	"github.com/aws/amazon-ecs-agent/agent/ecs_client/model/ecs"
-	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	dm "github.com/aws/amazon-ecs-agent/agent/engine/daemonmanager"
 	"github.com/aws/amazon-ecs-agent/agent/statechange"
-	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/api/ecs/model/ecs"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/tcs/model/ecstcs"
 
 	"github.com/aws/aws-sdk-go/aws"
 
@@ -84,7 +88,7 @@ func eventStream(name string) *eventstream.EventStream {
 
 // createGremlin creates the gremlin container using the docker client.
 // It is used only in the test code.
-func createGremlin(client *sdkClient.Client, netMode string) (*dockercontainer.ContainerCreateCreatedBody, error) {
+func createGremlin(client *sdkClient.Client, netMode string) (*dockercontainer.CreateResponse, error) {
 	containerGremlin, err := client.ContainerCreate(context.TODO(),
 		&dockercontainer.Config{
 			Image: testImageName,
@@ -99,7 +103,7 @@ func createGremlin(client *sdkClient.Client, netMode string) (*dockercontainer.C
 	return &containerGremlin, err
 }
 
-func createHealthContainer(client *sdkClient.Client) (*dockercontainer.ContainerCreateCreatedBody, error) {
+func createHealthContainer(client *sdkClient.Client) (*dockercontainer.CreateResponse, error) {
 	container, err := client.ContainerCreate(context.TODO(),
 		&dockercontainer.Config{
 			Image: testContainerHealthImageName,
@@ -378,4 +382,15 @@ func (engine *MockTaskEngine) Disable() {
 
 func (engine *MockTaskEngine) Info() (types.Info, error) {
 	return types.Info{}, nil
+}
+
+func (engine *MockTaskEngine) GetDaemonManagers() map[string]dm.DaemonManager {
+	return make(map[string]dm.DaemonManager)
+}
+
+func (engine *MockTaskEngine) GetDaemonTask(string) *apitask.Task {
+	return nil
+}
+
+func (engine *MockTaskEngine) SetDaemonTask(string, *apitask.Task) {
 }

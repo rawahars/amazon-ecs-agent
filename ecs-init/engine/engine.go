@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"time"
 
+	"github.com/aws/amazon-ecs-agent/ecs-init/apparmor"
 	"github.com/aws/amazon-ecs-agent/ecs-init/backoff"
 	"github.com/aws/amazon-ecs-agent/ecs-init/cache"
 	"github.com/aws/amazon-ecs-agent/ecs-init/config"
@@ -30,6 +32,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/ecs-init/gpu"
 
 	log "github.com/cihub/seelog"
+	ctrdapparmor "github.com/containerd/containerd/pkg/apparmor"
 )
 
 const (
@@ -44,12 +47,17 @@ const (
 	serviceStartRetryMultiplier   = 2.0
 	serviceStartMaxRetries        = math.MaxInt64 // essentially retry forever
 	failedContainerLogWindowSize  = "200"         // as string for log config
+	mountFilePermission           = 0755
 )
 
 // Injection point for testing purposes
-var getDockerClient = func() (dockerClient, error) {
-	return docker.Client()
-}
+var (
+	getDockerClient = func() (dockerClient, error) {
+		return docker.Client()
+	}
+	hostSupports       = ctrdapparmor.HostSupports
+	loadDefaultProfile = apparmor.LoadDefaultProfile
+)
 
 func dockerError(err error) error {
 	return engineError("could not create docker client", err)
@@ -111,6 +119,11 @@ func (e *Engine) PreStart() error {
 	if err != nil {
 		return err
 	}
+	// setup AppArmor if necessary
+	err = e.PreStartAppArmor()
+	if err != nil {
+		return err
+	}
 	// Enable use of loopback addresses for local routing purposes
 	log.Info("pre-start: enabling loopback routing")
 	err = e.loopbackRouting.Enable()
@@ -128,6 +141,13 @@ func (e *Engine) PreStart() error {
 	err = e.credentialsProxyRoute.Create()
 	if err != nil {
 		return engineError("could not create route to the credentials proxy", err)
+	}
+	// Add the EBS Task Attach host mount point
+	err = os.MkdirAll(config.MountDirectoryEBS(), mountFilePermission)
+	if err != nil {
+		// Log error and continue
+		// If directory creation fails, set ECS_EBSTA_SUPPORTED=false in docker/docker.go
+		log.Error("could not create EBS mount directory", err)
 	}
 
 	docker, err := getDockerClient()
@@ -184,6 +204,16 @@ func (e *Engine) PreStartGPU() error {
 				return engineError("Nvidia GPU Manager", err)
 			}
 		}
+	}
+	return nil
+}
+
+// PreStartAppArmor sets up the ecs-agent-default AppArmor profile if we're running
+// on an AppArmor-enabled system.
+func (e *Engine) PreStartAppArmor() error {
+	if hostSupports() {
+		log.Infof("pre-start: setting up %s AppArmor profile", apparmor.ECSAgentDefaultProfileName)
+		return loadDefaultProfile(apparmor.ECSAgentDefaultProfileName)
 	}
 	return nil
 }

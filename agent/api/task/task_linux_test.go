@@ -24,11 +24,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/api/serviceconnect"
 
-	"github.com/aws/amazon-ecs-agent/agent/api/appmesh"
-	apiappmesh "github.com/aws/amazon-ecs-agent/agent/api/appmesh"
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
-	apicontainerstatus "github.com/aws/amazon-ecs-agent/agent/api/container/status"
-	apieni "github.com/aws/amazon-ecs-agent/agent/api/eni"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
 	"github.com/aws/amazon-ecs-agent/agent/ecscni"
@@ -38,6 +34,10 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/taskresource/firelens"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource/ssmsecret"
 	mock_ioutilwrapper "github.com/aws/amazon-ecs-agent/agent/utils/ioutilwrapper/mocks"
+	apicontainerstatus "github.com/aws/amazon-ecs-agent/ecs-agent/api/container/status"
+	"github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/appmesh"
+	nlappmesh "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/appmesh"
+	ni "github.com/aws/amazon-ecs-agent/ecs-agent/netlib/model/networkinterface"
 	"github.com/golang/mock/gomock"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -103,7 +103,7 @@ func TestAddNetworkResourceProvisioningDependencyNop(t *testing.T) {
 
 func TestAddNetworkResourceProvisioningDependencyWithENI(t *testing.T) {
 	testTask := &Task{
-		ENIs: []*apieni.ENI{{}},
+		ENIs: []*ni.NetworkInterface{{}},
 		Containers: []*apicontainer.Container{
 			{
 				Name:                      "c1",
@@ -136,10 +136,10 @@ func TestAddNetworkResourceProvisioningDependencyWithAppMesh(t *testing.T) {
 	serializedConfig := string(bytes)
 
 	testTask := &Task{
-		AppMesh: &apiappmesh.AppMesh{
+		AppMesh: &nlappmesh.AppMesh{
 			ContainerName: proxyName,
 		},
-		ENIs:        []*apieni.ENI{{}},
+		ENIs:        []*ni.NetworkInterface{{}},
 		NetworkMode: AWSVPCNetworkMode,
 		Containers: []*apicontainer.Container{
 			{
@@ -183,10 +183,10 @@ func TestAddNetworkResourceProvisioningDependencyWithAppMeshDefaultImage(t *test
 	serializedConfig := string(bytes)
 
 	testTask := &Task{
-		AppMesh: &apiappmesh.AppMesh{
+		AppMesh: &nlappmesh.AppMesh{
 			ContainerName: proxyName,
 		},
-		ENIs:        []*apieni.ENI{{}},
+		ENIs:        []*ni.NetworkInterface{{}},
 		NetworkMode: AWSVPCNetworkMode,
 		Containers: []*apicontainer.Container{
 			{
@@ -220,10 +220,10 @@ func TestAddNetworkResourceProvisioningDependencyWithAppMeshDefaultImage(t *test
 
 func TestAddNetworkResourceProvisioningDependencyWithAppMeshError(t *testing.T) {
 	testTask := &Task{
-		AppMesh: &apiappmesh.AppMesh{
+		AppMesh: &nlappmesh.AppMesh{
 			ContainerName: proxyName,
 		},
-		ENIs:        []*apieni.ENI{{}},
+		ENIs:        []*ni.NetworkInterface{{}},
 		NetworkMode: AWSVPCNetworkMode,
 		Containers: []*apicontainer.Container{
 			{
@@ -303,7 +303,68 @@ func TestBuildLinuxResourceSpecCPUMem(t *testing.T) {
 		},
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
+
+	assert.NoError(t, err)
+	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
+}
+
+// BuildLinuxResourceSpec tested with pid limits passed in.
+func TestBuildLinuxResourceSpecCPUMem_WithPidLimits(t *testing.T) {
+	taskMemoryLimit := int64(taskMemoryLimit)
+
+	task := &Task{
+		Arn:    validTaskArn,
+		CPU:    float64(taskVCPULimit),
+		Memory: taskMemoryLimit,
+	}
+
+	expectedTaskCPUPeriod := uint64(defaultCPUPeriod / time.Microsecond)
+	expectedTaskCPUQuota := int64(taskVCPULimit * float64(expectedTaskCPUPeriod))
+	expectedTaskMemory := taskMemoryLimit * bytesPerMegabyte
+	expectedLinuxResourceSpec := specs.LinuxResources{
+		CPU: &specs.LinuxCPU{
+			Quota:  &expectedTaskCPUQuota,
+			Period: &expectedTaskCPUPeriod,
+		},
+		Memory: &specs.LinuxMemory{
+			Limit: &expectedTaskMemory,
+		},
+		Pids: &specs.LinuxPids{
+			Limit: int64(100),
+		},
+	}
+
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 100)
+
+	assert.NoError(t, err)
+	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
+}
+
+// no pid limits expected when BuildLinuxResourceSpec receives an invalid value.
+func TestBuildLinuxResourceSpecCPUMem_NegativeInvalidPidLimits(t *testing.T) {
+	taskMemoryLimit := int64(taskMemoryLimit)
+
+	task := &Task{
+		Arn:    validTaskArn,
+		CPU:    float64(taskVCPULimit),
+		Memory: taskMemoryLimit,
+	}
+
+	expectedTaskCPUPeriod := uint64(defaultCPUPeriod / time.Microsecond)
+	expectedTaskCPUQuota := int64(taskVCPULimit * float64(expectedTaskCPUPeriod))
+	expectedTaskMemory := taskMemoryLimit * bytesPerMegabyte
+	expectedLinuxResourceSpec := specs.LinuxResources{
+		CPU: &specs.LinuxCPU{
+			Quota:  &expectedTaskCPUQuota,
+			Period: &expectedTaskCPUPeriod,
+		},
+		Memory: &specs.LinuxMemory{
+			Limit: &expectedTaskMemory,
+		},
+	}
+
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, -1)
 
 	assert.NoError(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
@@ -325,7 +386,7 @@ func TestBuildLinuxResourceSpecCPU(t *testing.T) {
 		},
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
 
 	assert.NoError(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
@@ -340,7 +401,7 @@ func TestBuildLinuxResourceSpecIncreasedTaskCPULimit(t *testing.T) {
 		CPU: increasedTaskVCPULimit,
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
 
 	expectedTaskCPUPeriod := uint64(defaultCPUPeriod / time.Microsecond)
 	expectedTaskCPUQuota := int64(increasedTaskVCPULimit * float64(expectedTaskCPUPeriod))
@@ -364,14 +425,41 @@ func TestBuildLinuxResourceSpecWithoutTaskCPULimits(t *testing.T) {
 			},
 		},
 	}
-	expectedCPUShares := uint64(minimumCPUShare)
+	expectedCPUShares := uint64(minimumCPUShares)
 	expectedLinuxResourceSpec := specs.LinuxResources{
 		CPU: &specs.LinuxCPU{
 			Shares: &expectedCPUShares,
 		},
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
+
+	assert.NoError(t, err)
+	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
+}
+
+// TestBuildLinuxResourceSpecWithoutTaskCPULimits validates behavior of CPU Shares
+// validate that pid limits are also inserted correctly
+func TestBuildLinuxResourceSpecWithoutTaskCPULimits_WithPidLimits(t *testing.T) {
+	task := &Task{
+		Arn: validTaskArn,
+		Containers: []*apicontainer.Container{
+			{
+				Name: "C1",
+			},
+		},
+	}
+	expectedCPUShares := uint64(minimumCPUShares)
+	expectedLinuxResourceSpec := specs.LinuxResources{
+		CPU: &specs.LinuxCPU{
+			Shares: &expectedCPUShares,
+		},
+		Pids: &specs.LinuxPids{
+			Limit: int64(100),
+		},
+	}
+
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 100)
 
 	assert.NoError(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
@@ -395,14 +483,14 @@ func TestBuildLinuxResourceSpecWithoutTaskCPUWithContainerCPULimits(t *testing.T
 		},
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
 
 	assert.NoError(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
 }
 
 // TestBuildLinuxResourceSpecWithoutTaskCPUWithLessThanMinimumContainerCPULimits validates behavior of CPU Shares
-// when container CPU share is 1 (less than the current minimumCPUShare which is 2)
+// when container CPU share is 1 (less than the current minimumCPUShares which is 2)
 func TestBuildLinuxResourceSpecWithoutTaskCPUWithLessThanMinimumContainerCPULimits(t *testing.T) {
 	task := &Task{
 		Arn: validTaskArn,
@@ -420,7 +508,7 @@ func TestBuildLinuxResourceSpecWithoutTaskCPUWithLessThanMinimumContainerCPULimi
 		},
 	}
 
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
 
 	assert.NoError(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
@@ -443,7 +531,7 @@ func TestBuildLinuxResourceSpecInvalidMem(t *testing.T) {
 	}
 
 	expectedLinuxResourceSpec := specs.LinuxResources{}
-	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod)
+	linuxResourceSpec, err := task.BuildLinuxResourceSpec(defaultCPUPeriod, 0)
 
 	assert.Error(t, err)
 	assert.EqualValues(t, expectedLinuxResourceSpec, linuxResourceSpec)
@@ -593,7 +681,7 @@ func TestInitCgroupResourceSpecHappyPath(t *testing.T) {
 	defer ctrl.Finish()
 	mockControl := mock_control.NewMockControl(ctrl)
 	mockIO := mock_ioutilwrapper.NewMockIOUtil(ctrl)
-	assert.NoError(t, task.initializeCgroupResourceSpec("cgroupPath", defaultCPUPeriod, &taskresource.ResourceFields{
+	assert.NoError(t, task.initializeCgroupResourceSpec("cgroupPath", defaultCPUPeriod, 0, &taskresource.ResourceFields{
 		Control: mockControl,
 		ResourceFieldsCommon: &taskresource.ResourceFieldsCommon{
 			IOUtil: mockIO,
@@ -617,7 +705,7 @@ func TestInitCgroupResourceSpecInvalidARN(t *testing.T) {
 		MemoryCPULimitsEnabled: true,
 		ResourcesMapUnsafe:     make(map[string][]taskresource.TaskResource),
 	}
-	assert.Error(t, task.initializeCgroupResourceSpec("", time.Millisecond, nil))
+	assert.Error(t, task.initializeCgroupResourceSpec("", time.Millisecond, 0, nil))
 	assert.Equal(t, 0, len(task.GetResources()))
 	assert.Equal(t, 0, len(task.Containers[0].TransitionDependenciesMap))
 }
@@ -638,7 +726,7 @@ func TestInitCgroupResourceSpecInvalidMem(t *testing.T) {
 		MemoryCPULimitsEnabled: true,
 		ResourcesMapUnsafe:     make(map[string][]taskresource.TaskResource),
 	}
-	assert.Error(t, task.initializeCgroupResourceSpec("", time.Millisecond, nil))
+	assert.Error(t, task.initializeCgroupResourceSpec("", time.Millisecond, 0, nil))
 	assert.Equal(t, 0, len(task.GetResources()))
 	assert.Equal(t, 0, len(task.Containers[0].TransitionDependenciesMap))
 }
@@ -1319,13 +1407,13 @@ func TestBuildCNIConfigRegularENIWithAppMesh(t *testing.T) {
 			// ENI, Bridge and Appmesh
 			require.Len(t, cniConfig.NetworkConfigs, 3)
 			// The first one should be for the ENI.
-			var eniConfig ecscni.ENIConfig
+			var eniConfig ecscni.VPCENIPluginConfig
 			err = json.Unmarshal(cniConfig.NetworkConfigs[0].CNINetworkConfig.Bytes, &eniConfig)
 			require.NoError(t, err)
-			assert.Equal(t, mac, eniConfig.MACAddress, eniConfig)
-			assert.Equal(t, []string{ipv4 + ipv4Block, ipv6 + ipv6Block}, eniConfig.IPAddresses)
+			assert.Equal(t, mac, eniConfig.ENIMACAddress, eniConfig)
+			assert.Equal(t, []string{ipv4 + ipv4Block, ipv6 + ipv6Block}, eniConfig.ENIIPAddresses)
 			assert.Equal(t, []string{ipv4Gateway}, eniConfig.GatewayIPAddresses)
-			assert.Equal(t, blockIMDS, eniConfig.BlockInstanceMetadata)
+			assert.Equal(t, blockIMDS, eniConfig.BlockIMDS)
 			// The second one should be for the Bridge.
 			var bridgeConfig ecscni.BridgeConfig
 			err = json.Unmarshal(cniConfig.NetworkConfigs[1].CNINetworkConfig.Bytes, &bridgeConfig)
@@ -1365,13 +1453,13 @@ func TestBuildCNIConfigRegularENIWithServiceConnect(t *testing.T) {
 			// ENI, Bridge and ServiceConnect
 			require.Len(t, cniConfig.NetworkConfigs, 3)
 			// The first one should be for the ENI.
-			var eniConfig ecscni.ENIConfig
+			var eniConfig ecscni.VPCENIPluginConfig
 			err = json.Unmarshal(cniConfig.NetworkConfigs[0].CNINetworkConfig.Bytes, &eniConfig)
 			require.NoError(t, err)
-			assert.Equal(t, mac, eniConfig.MACAddress, eniConfig)
-			assert.Equal(t, []string{ipv4 + ipv4Block, ipv6 + ipv6Block}, eniConfig.IPAddresses)
+			assert.Equal(t, mac, eniConfig.ENIMACAddress, eniConfig)
+			assert.Equal(t, []string{ipv4 + ipv4Block, ipv6 + ipv6Block}, eniConfig.ENIIPAddresses)
 			assert.Equal(t, []string{ipv4Gateway}, eniConfig.GatewayIPAddresses)
-			assert.Equal(t, blockIMDS, eniConfig.BlockInstanceMetadata)
+			assert.Equal(t, blockIMDS, eniConfig.BlockIMDS)
 			// The second one should be for the Bridge.
 			var bridgeConfig ecscni.BridgeConfig
 			err = json.Unmarshal(cniConfig.NetworkConfigs[1].CNINetworkConfig.Bytes, &bridgeConfig)
@@ -1398,22 +1486,22 @@ func TestBuildCNIConfigTrunkBranchENI(t *testing.T) {
 		t.Run(fmt.Sprintf("When BlockInstanceMetadata is %t", blockIMDS), func(t *testing.T) {
 			testTask := &Task{}
 			testTask.NetworkMode = AWSVPCNetworkMode
-			testTask.AddTaskENI(&apieni.ENI{
+			testTask.AddTaskENI(&ni.NetworkInterface{
 				ID:                           "TestBuildCNIConfigTrunkBranchENI",
 				MacAddress:                   mac,
-				InterfaceAssociationProtocol: apieni.VLANInterfaceAssociationProtocol,
-				InterfaceVlanProperties: &apieni.InterfaceVlanProperties{
+				InterfaceAssociationProtocol: ni.VLANInterfaceAssociationProtocol,
+				InterfaceVlanProperties: &ni.InterfaceVlanProperties{
 					VlanID:                   "1234",
 					TrunkInterfaceMacAddress: "macTrunk",
 				},
 				SubnetGatewayIPV4Address: ipv4Gateway + ipv4Block,
-				IPV4Addresses: []*apieni.ENIIPV4Address{
+				IPV4Addresses: []*ni.IPV4Address{
 					{
 						Primary: true,
 						Address: ipv4,
 					},
 				},
-				IPV6Addresses: []*apieni.ENIIPV6Address{
+				IPV6Addresses: []*ni.IPV6Address{
 					{
 						Address: ipv6,
 					},
@@ -1487,6 +1575,165 @@ func TestBuildCNIBridgeModeWithServiceConnect(t *testing.T) {
 			}
 			assert.True(t, scConfig.EnableIPv4)
 			assert.False(t, scConfig.EnableIPv6)
+		})
+	}
+}
+
+// TestBuildImplicitLinuxCPUSpec tests the task's CPU spec generation when "task.CPU" is not explicitly set.
+func TestBuildImplicitLinuxCPUSpec(t *testing.T) {
+	testCases := []struct {
+		name                string
+		task                *Task
+		expectedTaskCPUSpec specs.LinuxCPU
+	}{
+		{
+			name: "2 containers: each with CPU within permitted range",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(10),
+					},
+					{
+						CPU: uint(20),
+					},
+				},
+			},
+			expectedTaskCPUSpec: specs.LinuxCPU{
+				Shares: aws.Uint64(30),
+			},
+		},
+		{
+			name: "2 containers: 1 of them with CPU below min",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(1),
+					},
+					{
+						CPU: uint(10),
+					},
+				},
+			},
+			expectedTaskCPUSpec: specs.LinuxCPU{
+				Shares: aws.Uint64(uint64(12)),
+			},
+		},
+		{
+			name: "2 containers: 1 of them with CPU above max",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(1),
+					},
+					{
+						CPU: uint(364544),
+					},
+				},
+			},
+			expectedTaskCPUSpec: specs.LinuxCPU{
+				Shares: aws.Uint64(uint64(maximumCPUShares)),
+			},
+		},
+		{
+			name: "2 containers: each with CPU within permitted range, but the sum of both is beyond the max permitted",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(200000),
+					},
+					{
+						CPU: uint(200000),
+					},
+				},
+			},
+			expectedTaskCPUSpec: specs.LinuxCPU{
+				Shares: aws.Uint64(uint64(maximumCPUShares)),
+			},
+		},
+		{
+			name: "3 containers: 1 with CPU within permitted range, 1 above max, and 1 below min",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(5),
+					},
+					{
+						CPU: uint(1),
+					},
+					{
+						CPU: uint(364544),
+					},
+				},
+			},
+			expectedTaskCPUSpec: specs.LinuxCPU{
+				Shares: aws.Uint64(uint64(maximumCPUShares)),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.task.buildImplicitLinuxCPUSpec()
+			assert.Equal(t, tc.expectedTaskCPUSpec, result)
+		})
+	}
+}
+
+// TestDockerCPUShares tests the dockerCPUShares() conversion method,
+// which is used to send the container shares info to Docker
+func TestDockerCPUShares(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		task                    *Task
+		expectedContainerShares int64
+	}{
+		{
+			name: "container CPU within permitted range",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(10),
+					},
+				},
+			},
+			expectedContainerShares: int64(10),
+		},
+		{
+			name: "container CPU below min",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(1),
+					},
+				},
+			},
+			expectedContainerShares: int64(minimumCPUShares),
+		},
+		{
+			name: "container CPU above max",
+			task: &Task{
+				Arn: validTaskArn,
+				Containers: []*apicontainer.Container{
+					{
+						CPU: uint(364544),
+					},
+				},
+			},
+			expectedContainerShares: int64(maximumCPUShares),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.task.dockerCPUShares(tc.task.Containers[0].CPU)
+			assert.Equal(t, tc.expectedContainerShares, result)
 		})
 	}
 }

@@ -251,6 +251,14 @@
       "exception":true
     },
     "Boolean":{"type":"boolean"},
+    "BoxedBoolean":{
+      "type":"boolean",
+      "box":true
+    },
+    "BoxedInteger":{
+      "type":"integer",
+      "box":true
+    },
     "CloseMessage":{
       "type":"structure",
       "members":{
@@ -275,12 +283,12 @@
       "members":{
         "command":{"shape":"StringList"},
         "cpu":{"shape":"Integer"},
+        "credentialSpecs":{"shape":"StringList"},
         "entryPoint":{"shape":"StringList"},
         "environment":{"shape":"EnvironmentVariables"},
         "environmentFiles":{"shape":"EnvironmentFiles"},
         "essential":{"shape":"Boolean"},
         "restartPolicy":{"shape":"RestartPolicy"},
-        "restartMaxAttempts":{"shape":"Integer"},
         "image":{"shape":"String"},
         "links":{"shape":"StringList"},
         "memory":{"shape":"Integer"},
@@ -289,6 +297,8 @@
         "portMappings":{"shape":"PortMappingList"},
         "managedAgents":{"shape":"ManagedAgentList"},
         "mountPoints":{"shape":"MountPointList"},
+        "linuxParameters":{"shape":"LinuxParameters"},
+        "privileged":{"shape":"BoxedBoolean"},
         "networkInterfaceNames":{"shape":"StringList"},
         "volumesFrom":{"shape":"VolumeFromList"},
         "dockerConfig":{"shape":"DockerConfig"},
@@ -302,6 +312,18 @@
         "firelensConfiguration":{"shape":"FirelensConfiguration"},
         "containerArn":{"shape":"String"}
       }
+    },
+    "RestartPolicy":{
+      "type":"structure",
+      "members":{
+        "enabled":{"shape":"Boolean"},
+        "ignoredExitCodes":{"shape":"IntegerList"},
+        "restartAttemptPeriod":{"shape":"Integer"}
+      }
+    },
+    "IntegerList":{
+      "type":"list",
+      "member":{"shape":"Integer"}
     },
     "ContainerCondition":{
       "type":"string",
@@ -525,7 +547,8 @@
         "accessKeyId":{"shape":"String"},
         "secretAccessKey":{"shape":"SensitiveString"},
         "sessionToken":{"shape":"String"},
-        "expiration":{"shape":"String"}
+        "expiration":{"shape":"String"},
+        "credentialScope":{"shape":"String"}
       }
     },
     "IAMRoleCredentialsAckRequest":{
@@ -617,6 +640,48 @@
       "type":"list",
       "member":{"shape":"MountPoint"}
     },
+    "KernelCapabilities":{
+      "type":"structure",
+      "members":{
+        "add":{"shape":"StringList"},
+        "drop":{"shape":"StringList"}
+      }
+    },
+    "Device":{
+      "type":"structure",
+      "required":["hostPath"],
+      "members":{
+        "hostPath":{"shape":"String"},
+        "containerPath":{"shape":"String"},
+        "permissions":{"shape":"DeviceCgroupPermissions"}
+      }
+    },
+    "DeviceCgroupPermission":{
+      "type":"string",
+      "enum":[
+        "read",
+        "write",
+        "mknod"
+      ]
+    },
+    "DeviceCgroupPermissions":{
+      "type":"list",
+      "member":{"shape":"DeviceCgroupPermission"}
+    },
+    "DevicesList":{
+      "type":"list",
+      "member":{"shape":"Device"}
+    },
+    "LinuxParameters":{
+      "type":"structure",
+      "members":{
+        "capabilities":{"shape":"KernelCapabilities"},
+        "devices":{"shape":"DevicesList"},
+        "initProcessEnabled":{"shape":"BoxedBoolean"},
+        "sharedMemorySize":{"shape":"BoxedInteger"}
+      }
+    },
+
     "NackRequest":{
       "type":"structure",
       "members":{
@@ -728,14 +793,6 @@
         "ecrAuthData":{"shape":"ECRAuthData"},
         "asmAuthData":{"shape":"ASMAuthData"}
       }
-    },
-    "RestartPolicy":{
-      "type":"string",
-      "enum":[
-        "NEVER",
-        "UNLESS_TASK_STOPPED",
-        "ON_FAILURE"
-      ]
     },
     "RoleType":{
       "type":"string",

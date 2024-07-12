@@ -50,6 +50,89 @@ func (m *MockSecretsManagerAPI) EXPECT() *MockSecretsManagerAPIMockRecorder {
 	return m.recorder
 }
 
+// BatchGetSecretValue mocks base method.
+func (m *MockSecretsManagerAPI) BatchGetSecretValue(arg0 *secretsmanager.BatchGetSecretValueInput) (*secretsmanager.BatchGetSecretValueOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchGetSecretValue", arg0)
+	ret0, _ := ret[0].(*secretsmanager.BatchGetSecretValueOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchGetSecretValue indicates an expected call of BatchGetSecretValue.
+func (mr *MockSecretsManagerAPIMockRecorder) BatchGetSecretValue(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchGetSecretValue", reflect.TypeOf((*MockSecretsManagerAPI)(nil).BatchGetSecretValue), arg0)
+}
+
+// BatchGetSecretValuePages mocks base method.
+func (m *MockSecretsManagerAPI) BatchGetSecretValuePages(arg0 *secretsmanager.BatchGetSecretValueInput, arg1 func(*secretsmanager.BatchGetSecretValueOutput, bool) bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchGetSecretValuePages", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchGetSecretValuePages indicates an expected call of BatchGetSecretValuePages.
+func (mr *MockSecretsManagerAPIMockRecorder) BatchGetSecretValuePages(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchGetSecretValuePages", reflect.TypeOf((*MockSecretsManagerAPI)(nil).BatchGetSecretValuePages), arg0, arg1)
+}
+
+// BatchGetSecretValuePagesWithContext mocks base method.
+func (m *MockSecretsManagerAPI) BatchGetSecretValuePagesWithContext(arg0 context.Context, arg1 *secretsmanager.BatchGetSecretValueInput, arg2 func(*secretsmanager.BatchGetSecretValueOutput, bool) bool, arg3 ...request.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "BatchGetSecretValuePagesWithContext", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchGetSecretValuePagesWithContext indicates an expected call of BatchGetSecretValuePagesWithContext.
+func (mr *MockSecretsManagerAPIMockRecorder) BatchGetSecretValuePagesWithContext(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchGetSecretValuePagesWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).BatchGetSecretValuePagesWithContext), varargs...)
+}
+
+// BatchGetSecretValueRequest mocks base method.
+func (m *MockSecretsManagerAPI) BatchGetSecretValueRequest(arg0 *secretsmanager.BatchGetSecretValueInput) (*request.Request, *secretsmanager.BatchGetSecretValueOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchGetSecretValueRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*secretsmanager.BatchGetSecretValueOutput)
+	return ret0, ret1
+}
+
+// BatchGetSecretValueRequest indicates an expected call of BatchGetSecretValueRequest.
+func (mr *MockSecretsManagerAPIMockRecorder) BatchGetSecretValueRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchGetSecretValueRequest", reflect.TypeOf((*MockSecretsManagerAPI)(nil).BatchGetSecretValueRequest), arg0)
+}
+
+// BatchGetSecretValueWithContext mocks base method.
+func (m *MockSecretsManagerAPI) BatchGetSecretValueWithContext(arg0 context.Context, arg1 *secretsmanager.BatchGetSecretValueInput, arg2 ...request.Option) (*secretsmanager.BatchGetSecretValueOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "BatchGetSecretValueWithContext", varargs...)
+	ret0, _ := ret[0].(*secretsmanager.BatchGetSecretValueOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchGetSecretValueWithContext indicates an expected call of BatchGetSecretValueWithContext.
+func (mr *MockSecretsManagerAPIMockRecorder) BatchGetSecretValueWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchGetSecretValueWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).BatchGetSecretValueWithContext), varargs...)
+}
+
 // CancelRotateSecret mocks base method.
 func (m *MockSecretsManagerAPI) CancelRotateSecret(arg0 *secretsmanager.CancelRotateSecretInput) (*secretsmanager.CancelRotateSecretOutput, error) {
 	m.ctrl.T.Helper()
@@ -716,6 +799,106 @@ func (mr *MockSecretsManagerAPIMockRecorder) PutSecretValueWithContext(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutSecretValueWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).PutSecretValueWithContext), varargs...)
 }
 
+// RemoveRegionsFromReplication mocks base method.
+func (m *MockSecretsManagerAPI) RemoveRegionsFromReplication(arg0 *secretsmanager.RemoveRegionsFromReplicationInput) (*secretsmanager.RemoveRegionsFromReplicationOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveRegionsFromReplication", arg0)
+	ret0, _ := ret[0].(*secretsmanager.RemoveRegionsFromReplicationOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveRegionsFromReplication indicates an expected call of RemoveRegionsFromReplication.
+func (mr *MockSecretsManagerAPIMockRecorder) RemoveRegionsFromReplication(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRegionsFromReplication", reflect.TypeOf((*MockSecretsManagerAPI)(nil).RemoveRegionsFromReplication), arg0)
+}
+
+// RemoveRegionsFromReplicationRequest mocks base method.
+func (m *MockSecretsManagerAPI) RemoveRegionsFromReplicationRequest(arg0 *secretsmanager.RemoveRegionsFromReplicationInput) (*request.Request, *secretsmanager.RemoveRegionsFromReplicationOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveRegionsFromReplicationRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*secretsmanager.RemoveRegionsFromReplicationOutput)
+	return ret0, ret1
+}
+
+// RemoveRegionsFromReplicationRequest indicates an expected call of RemoveRegionsFromReplicationRequest.
+func (mr *MockSecretsManagerAPIMockRecorder) RemoveRegionsFromReplicationRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRegionsFromReplicationRequest", reflect.TypeOf((*MockSecretsManagerAPI)(nil).RemoveRegionsFromReplicationRequest), arg0)
+}
+
+// RemoveRegionsFromReplicationWithContext mocks base method.
+func (m *MockSecretsManagerAPI) RemoveRegionsFromReplicationWithContext(arg0 context.Context, arg1 *secretsmanager.RemoveRegionsFromReplicationInput, arg2 ...request.Option) (*secretsmanager.RemoveRegionsFromReplicationOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveRegionsFromReplicationWithContext", varargs...)
+	ret0, _ := ret[0].(*secretsmanager.RemoveRegionsFromReplicationOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveRegionsFromReplicationWithContext indicates an expected call of RemoveRegionsFromReplicationWithContext.
+func (mr *MockSecretsManagerAPIMockRecorder) RemoveRegionsFromReplicationWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRegionsFromReplicationWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).RemoveRegionsFromReplicationWithContext), varargs...)
+}
+
+// ReplicateSecretToRegions mocks base method.
+func (m *MockSecretsManagerAPI) ReplicateSecretToRegions(arg0 *secretsmanager.ReplicateSecretToRegionsInput) (*secretsmanager.ReplicateSecretToRegionsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateSecretToRegions", arg0)
+	ret0, _ := ret[0].(*secretsmanager.ReplicateSecretToRegionsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplicateSecretToRegions indicates an expected call of ReplicateSecretToRegions.
+func (mr *MockSecretsManagerAPIMockRecorder) ReplicateSecretToRegions(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateSecretToRegions", reflect.TypeOf((*MockSecretsManagerAPI)(nil).ReplicateSecretToRegions), arg0)
+}
+
+// ReplicateSecretToRegionsRequest mocks base method.
+func (m *MockSecretsManagerAPI) ReplicateSecretToRegionsRequest(arg0 *secretsmanager.ReplicateSecretToRegionsInput) (*request.Request, *secretsmanager.ReplicateSecretToRegionsOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateSecretToRegionsRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*secretsmanager.ReplicateSecretToRegionsOutput)
+	return ret0, ret1
+}
+
+// ReplicateSecretToRegionsRequest indicates an expected call of ReplicateSecretToRegionsRequest.
+func (mr *MockSecretsManagerAPIMockRecorder) ReplicateSecretToRegionsRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateSecretToRegionsRequest", reflect.TypeOf((*MockSecretsManagerAPI)(nil).ReplicateSecretToRegionsRequest), arg0)
+}
+
+// ReplicateSecretToRegionsWithContext mocks base method.
+func (m *MockSecretsManagerAPI) ReplicateSecretToRegionsWithContext(arg0 context.Context, arg1 *secretsmanager.ReplicateSecretToRegionsInput, arg2 ...request.Option) (*secretsmanager.ReplicateSecretToRegionsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ReplicateSecretToRegionsWithContext", varargs...)
+	ret0, _ := ret[0].(*secretsmanager.ReplicateSecretToRegionsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplicateSecretToRegionsWithContext indicates an expected call of ReplicateSecretToRegionsWithContext.
+func (mr *MockSecretsManagerAPIMockRecorder) ReplicateSecretToRegionsWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateSecretToRegionsWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).ReplicateSecretToRegionsWithContext), varargs...)
+}
+
 // RestoreSecret mocks base method.
 func (m *MockSecretsManagerAPI) RestoreSecret(arg0 *secretsmanager.RestoreSecretInput) (*secretsmanager.RestoreSecretOutput, error) {
 	m.ctrl.T.Helper()
@@ -814,6 +997,56 @@ func (mr *MockSecretsManagerAPIMockRecorder) RotateSecretWithContext(arg0, arg1 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RotateSecretWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).RotateSecretWithContext), varargs...)
+}
+
+// StopReplicationToReplica mocks base method.
+func (m *MockSecretsManagerAPI) StopReplicationToReplica(arg0 *secretsmanager.StopReplicationToReplicaInput) (*secretsmanager.StopReplicationToReplicaOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopReplicationToReplica", arg0)
+	ret0, _ := ret[0].(*secretsmanager.StopReplicationToReplicaOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopReplicationToReplica indicates an expected call of StopReplicationToReplica.
+func (mr *MockSecretsManagerAPIMockRecorder) StopReplicationToReplica(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopReplicationToReplica", reflect.TypeOf((*MockSecretsManagerAPI)(nil).StopReplicationToReplica), arg0)
+}
+
+// StopReplicationToReplicaRequest mocks base method.
+func (m *MockSecretsManagerAPI) StopReplicationToReplicaRequest(arg0 *secretsmanager.StopReplicationToReplicaInput) (*request.Request, *secretsmanager.StopReplicationToReplicaOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopReplicationToReplicaRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*secretsmanager.StopReplicationToReplicaOutput)
+	return ret0, ret1
+}
+
+// StopReplicationToReplicaRequest indicates an expected call of StopReplicationToReplicaRequest.
+func (mr *MockSecretsManagerAPIMockRecorder) StopReplicationToReplicaRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopReplicationToReplicaRequest", reflect.TypeOf((*MockSecretsManagerAPI)(nil).StopReplicationToReplicaRequest), arg0)
+}
+
+// StopReplicationToReplicaWithContext mocks base method.
+func (m *MockSecretsManagerAPI) StopReplicationToReplicaWithContext(arg0 context.Context, arg1 *secretsmanager.StopReplicationToReplicaInput, arg2 ...request.Option) (*secretsmanager.StopReplicationToReplicaOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StopReplicationToReplicaWithContext", varargs...)
+	ret0, _ := ret[0].(*secretsmanager.StopReplicationToReplicaOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopReplicationToReplicaWithContext indicates an expected call of StopReplicationToReplicaWithContext.
+func (mr *MockSecretsManagerAPIMockRecorder) StopReplicationToReplicaWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopReplicationToReplicaWithContext", reflect.TypeOf((*MockSecretsManagerAPI)(nil).StopReplicationToReplicaWithContext), varargs...)
 }
 
 // TagResource mocks base method.
